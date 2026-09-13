@@ -8,3 +8,4 @@ assets/
 *.egg-info/
 .DS_Store
 .pytest_cache/
+MUJOCO_LOG.TXT
