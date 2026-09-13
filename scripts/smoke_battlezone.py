@@ -16,7 +16,7 @@ def main() -> None:
     rng = np.random.default_rng(0)
     total = 0.0
     for _ in range(500):
-        _, reward, _ = game.step(int(rng.integers(game.n_actions)))
+        _, reward, _, _ = game.step(int(rng.integers(game.n_actions)))
         total += reward
     print(f"500 random steps, reward: {total}, frame: {game.frame.shape}")
     OUT.mkdir(exist_ok=True)

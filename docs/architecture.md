@@ -59,11 +59,12 @@ the spectacle. Same brain, eyes, cockpit, game in both.
 ## Milestones
 
 - [x] M0 — repo, scaffold, smoke tests
-- [ ] M1 — **the crux**: BattleZone frame → MuJoCo screen texture → eye-camera
-      offscreen render sees the game (proven by `scripts/smoke_cockpit_screen.py`)
-- [ ] M2 — closed loop with a FAKE brain (random walk / hand-written reflexes)
-      through the full pipeline: frame → retina → stub → levers → actions.
-      Proves latency and plumbing before any connectome data.
+- [x] M1 — **the crux**: BattleZone frame → MuJoCo screen texture → eye-camera
+      offscreen render sees the game (proven by `scripts/smoke_cockpit_screen.py`,
+      including a right-way-up orientation gate)
+- [x] M2 — closed loop with a FAKE brain (hand-written reflexes) through the
+      full pipeline: frame → retina → stub → levers → actions. ~160 Hz on the
+      Mac (10x headroom over the 15 Hz game rate). `scripts/run_m2.py`.
 - [ ] M3 — connectome download + LIF core (start with the looming→giant-fiber
       escape circuit ~600 neurons; validate against Shiu et al. sugar→proboscis
       result before scaling to whole brain)
@@ -72,6 +73,27 @@ the spectacle. Same brain, eyes, cockpit, game in both.
 - [ ] M5 — cockpit art pass (CRT shader-baked textures, neon, warning lights)
 - [ ] M6 — embodied mode: flybody seated, contact-driven controls (4090)
 - [ ] M7 — learning experiments + the showcase video
+
+## Interface decisions (M2 review, 2026-09-13)
+
+- `dn.py` owns the DN contract: names, Hz units, per-DN calibration to
+  normalized [0,1] drives. Brains emit raw Hz; controls consume normalized.
+  Swapping in the M3 connectome = editing calibration entries only. DNp01 is
+  calibrated as an event neuron (one spike per tick saturates).
+- Brain contract: `step(drives, dt, signals) -> DN rates` + `reset()`.
+  `dt` has one source of truth (`BattleZone.dt`, derived from frameskip).
+  `signals` = {damage, reward, episode_end} — the M7 dopamine hook.
+- Retina owns photoreceptor calibration: `photoreceptors()` returns (n, 2)
+  drives in [0,1] (R1-6 broadband, R8 blue) against `WHITE_REF` — after any
+  art pass (M5), re-measure that one constant instead of retuning the brain.
+- Sticky actions OFF (determinism for circuit validation); episode auto-reset
+  is a stated decision ("the fly keeps living") with temporal state cleared at
+  the boundary; one-step motor latency is deliberate (reaction time).
+- The damage lamp lives above the screen, inside the eyes' FOV — a flash is a
+  real stimulus, not decoration.
+- Dev gotcha: pip's editable-install `.pth` can end up with the macOS hidden
+  flag set, and Python 3.14's site module silently skips hidden `.pth` files
+  (`ModuleNotFoundError: noflyzone`). Fix: `chflags nohidden .venv/lib/python3.14/site-packages/__editable__.*.pth`.
 
 ## Platform decisions (verified 2026-09-13)
 

@@ -30,7 +30,17 @@ def main() -> None:
 
     eye = cockpit.render(camera="eye_left")
     assert eye.std() > 5.0, "eye camera sees nothing — screen not visible"
-    print("PASS: eye camera sees the game screen")
+
+    # orientation check: bright-top / dark-bottom pattern must arrive
+    # right-way-up at the eye (guards the texture-upload path against flips)
+    pattern = np.zeros((210, 160, 3), dtype=np.uint8)
+    pattern[:105] = 255
+    cockpit.set_screen(pattern)
+    view = cockpit.render(camera="eye_left").mean(axis=2)
+    top, bottom = view[: view.shape[0] // 3], view[-view.shape[0] // 3:]
+    assert top.mean() > bottom.mean() + 30, (
+        f"screen upside down: top {top.mean():.0f} vs bottom {bottom.mean():.0f}")
+    print("PASS: eye camera sees the game screen, right way up")
     cockpit.close()
     game.close()
 

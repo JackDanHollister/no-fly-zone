@@ -10,6 +10,7 @@ dependencies = [
     "numpy>=1.26",
     "scipy>=1.11",
     "pillow>=10.0",
+    "imageio[ffmpeg]>=2.34",
 ]
 
 [project.optional-dependencies]
