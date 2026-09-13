@@ -38,7 +38,10 @@ def main() -> None:
         if writer is not None:
             beauty = loop.cockpit.render("beauty")
             mosaic = loop.retina.reconstruct(state["rgb"]["left"])
-            writer.append_data(np.hstack([beauty, state["eye_left"], mosaic]))
+            panels = [beauty, state["eye_left"], mosaic]
+            if loop.cockpit.pov_camera:
+                panels.append(loop.cockpit.render(loop.cockpit.pov_camera))
+            writer.append_data(np.hstack(panels))
         if (i + 1) % 200 == 0:
             print(f"step {i + 1}: reward so far {loop.total_reward}, "
                   f"steer {loop.controls.steer:+.2f}, "

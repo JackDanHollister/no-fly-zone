@@ -1,0 +1,77 @@
+WARNING Sun Sep 13 21:09:22 2026: Attach conflict when attaching 'fruitfly' to 'attach-test', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Sun Sep 13 21:10:09 2026: Attach conflict when attaching 'fruitfly' to 'attach-test', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Sun Sep 13 21:12:18 2026: Attach conflict when attaching 'fruitfly' to 'no-fly-zone-cockpit', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Sun Sep 13 21:13:47 2026: Attach conflict when attaching 'fruitfly' to 'no-fly-zone-cockpit', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Sun Sep 13 21:13:48 2026: Attach conflict when attaching 'fruitfly' to 'no-fly-zone-cockpit', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Sun Sep 13 21:15:50 2026: Attach conflict when attaching 'fruitfly' to 'no-fly-zone-cockpit', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+
+WARNING Sun Sep 13 21:15:51 2026: Attach conflict when attaching 'fruitfly' to 'no-fly-zone-cockpit', policy is 'warning'
+timestep: parent has 0.002 (default), child has 0.0001, keeping parent value
+noslip_iterations: parent has 0 (default), child has 3, keeping parent value
+density: parent has 0 (default), child has 0.00128, keeping parent value
+viscosity: parent has 0 (default), child has 0.000185, keeping parent value
+cone: parent has 0 (default), child has 1, keeping parent value
+gravity: parent has 0 0 -9.81 (default), child has 0 0 -981, keeping parent value
+njmax: parent has -1 (default), child has 300, keeping parent value
+nconmax: parent has -1 (default), child has 100, keeping parent value
+nkey: parent has 0 (default), child has 1, keeping parent value
+

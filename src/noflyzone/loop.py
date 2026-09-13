@@ -58,8 +58,9 @@ class PilotLoop:
         self._lamp_steps = max(0, self._lamp_steps - 1)
 
         self._timed("texture", self.cockpit.set_screen, frame)
-        eye_l = self._timed("render", self.cockpit.render, "eye_left")
-        eye_r = self._timed("render", self.cockpit.render, "eye_right")
+        cam_l, cam_r = self.cockpit.eye_cameras
+        eye_l = self._timed("render", self.cockpit.render, cam_l)
+        eye_r = self._timed("render", self.cockpit.render, cam_r)
         rgb = {
             "left": self._timed("retina", self.retina.sample, eye_l),
             "right": self._timed("retina", self.retina.sample, eye_r),

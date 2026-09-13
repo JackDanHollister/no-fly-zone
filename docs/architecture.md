@@ -65,6 +65,18 @@ the spectacle. Same brain, eyes, cockpit, game in both.
 - [x] M2 — closed loop with a FAKE brain (hand-written reflexes) through the
       full pipeline: frame → retina → stub → levers → actions. ~160 Hz on the
       Mac (10x headroom over the 15 Hz game rate). `scripts/run_m2.py`.
+- [x] M2.5 — the fly is IN the cockpit: DeepMind/Janelia `flybody` model
+      (fetched by `scripts/fetch_assets.py`, ~137 MB, gitignored) seated via
+      MjSpec attach (freejoint deleted, stance keyframe applied by joint name,
+      kinematic puppet). Cockpit geometry is derived from its measured anatomy
+      (levers under the front claws at ±0.087/0.050/-0.054, screen at head
+      height). Retina feeds from "contact-lens" cameras just ahead of the
+      antennae (behind that the fly's own head occludes the screen — found
+      the fun way); the anatomical 140° fisheye eye cams ship with flybody
+      and are kept as `pov_camera` for visuals until M3 maps ommatidia by
+      real ray directions. Falls back to the bare cockpit when assets are
+      missing. ~21 Hz on the Mac with the fly (still above the 15 Hz game
+      rate; renders are the cost).
 - [ ] M3 — connectome download + LIF core (start with the looming→giant-fiber
       escape circuit ~600 neurons; validate against Shiu et al. sugar→proboscis
       result before scaling to whole brain)
@@ -93,7 +105,9 @@ the spectacle. Same brain, eyes, cockpit, game in both.
   real stimulus, not decoration.
 - Dev gotcha: pip's editable-install `.pth` can end up with the macOS hidden
   flag set, and Python 3.14's site module silently skips hidden `.pth` files
-  (`ModuleNotFoundError: noflyzone`). Fix: `chflags nohidden .venv/lib/python3.14/site-packages/__editable__.*.pth`.
+  (`ModuleNotFoundError: noflyzone`). `chflags nohidden` works but the flag
+  has come back; the durable fix in this venv is a direct symlink:
+  `ln -sfn "$(pwd)/src/noflyzone" .venv/lib/python3.14/site-packages/noflyzone`.
 
 ## Platform decisions (verified 2026-09-13)
 

@@ -4,6 +4,7 @@ __pycache__/
 venv/
 data/
 out/
+assets/
 *.egg-info/
 .DS_Store
 .pytest_cache/
