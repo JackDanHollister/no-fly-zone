@@ -36,6 +36,7 @@ CLAW_X, CLAW_Y, CLAW_Z = 0.087, 0.050, -0.054
 _XML = f"""
 <mujoco model="no-fly-zone-cockpit">
   <visual>
+    <global offwidth="1280" offheight="960"/>
     <headlight ambient="0.12 0.12 0.14" diffuse="0.3 0.3 0.35"/>
   </visual>
   <asset>
