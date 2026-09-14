@@ -105,9 +105,11 @@ def main() -> None:
     t0 = time.time()
     trace = []
     names = loop.game.action_meanings
+    peak_spiking = 0
     for i in range(args.steps):
         state = loop.step()
         spiking = int((brain.window_counts > 0).sum())
+        peak_spiking = max(peak_spiking, spiking)
         trace.append({"tick": i, "dn": state["dn"], "drive": dict(loop.controls.drive),
                       "suppressed": bool(loop.controls.suppressed),
                       "steer": loop.controls.steer, "throttle": loop.controls.throttle,
@@ -145,7 +147,9 @@ def main() -> None:
           f"({speed:.1f}x real time)")
     print("latency:")
     print(loop.latency_report())
-    assert (brain.window_counts > 0).sum() > 0, "brain silent — injection broken"
+    # a corrected brain is genuinely silent on a dark game-over screen, so
+    # gate on the whole run, not the final tick
+    assert peak_spiking > 0, "brain silent for the whole run — injection broken"
     if args.trace:
         import json
         OUT.mkdir(exist_ok=True)
