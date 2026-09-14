@@ -65,6 +65,21 @@ _XML = f"""
     <material name="rubber" rgba="0.09 0.09 0.11 1" specular="0.05"/>
     <material name="glass_green" rgba="0.25 0.75 0.45 1" emission="0.7"/>
     <material name="glass_amber" rgba="0.9 0.65 0.2 1" emission="0.7"/>
+    <material name="olive" rgba="0.23 0.25 0.17 1" specular="0.15" shininess="0.2"/>
+    <material name="gunmetal" rgba="0.15 0.16 0.15 1" specular="0.5" shininess="0.5"/>
+    <material name="brass" rgba="0.62 0.48 0.22 1" specular="0.85" shininess="0.7"/>
+    <texture name="tally" type="2d" builtin="flat" rgb1="0.1 0.1 0.09"
+             width="128" height="96"/>
+    <material name="tally_mat" texture="tally" emission="0.5" specular="0"/>
+    <texture name="poster1" type="2d" builtin="flat" rgb1="0.1 0.05 0.03"
+             width="128" height="176"/>
+    <material name="poster1_mat" texture="poster1" emission="0.45" specular="0"/>
+    <texture name="poster2" type="2d" builtin="flat" rgb1="0.05 0.07 0.12"
+             width="128" height="160"/>
+    <material name="poster2_mat" texture="poster2" emission="0.45" specular="0"/>
+    <texture name="crate" type="2d" builtin="flat" rgb1="0.2 0.22 0.15"
+             width="128" height="64"/>
+    <material name="crate_mat" texture="crate" emission="0.35" specular="0"/>
   </asset>
   <worldbody>
     <!-- directional key + rim (no spotlight cone edges on the CRT — the
@@ -175,6 +190,60 @@ _XML = f"""
     <geom name="cable3" type="capsule" fromto="0.10 0.19 -0.145 0.34 -0.10 -0.146"
           size="0.004" material="rubber"/>
 
+    <!-- tank interior: sloped armor glacis plates flanking the screen -->
+    <geom name="armor_l" type="box" pos="-0.30 0.33 0.06" size="0.11 0.014 0.22"
+          euler="0 18 -20" material="olive"/>
+    <geom name="armor_r" type="box" pos="0.30 0.33 0.06" size="0.11 0.014 0.22"
+          euler="0 -18 20" material="olive"/>
+    <geom name="periscope" type="box" pos="0 0.235 0.275" size="0.045 0.028 0.016"
+          material="gunmetal"/>
+    <geom name="periscope_slit" type="box" pos="0 0.206 0.275" size="0.032 0.002 0.004"
+          rgba="0.05 0.35 0.2 1"/>
+    <replicate count="7" offset="0 0.09 0">
+      <geom type="sphere" size="0.0045" pos="0.372 -0.30 0.325" material="gunmetal"/>
+    </replicate>
+    <replicate count="7" offset="0 0.09 0">
+      <geom type="sphere" size="0.0045" pos="0.372 -0.30 -0.10" material="gunmetal"/>
+    </replicate>
+    <replicate count="5" offset="0 0 0.06">
+      <geom type="sphere" size="0.004" pos="-0.236 0.245 -0.02" material="gunmetal"/>
+    </replicate>
+    <replicate count="5" offset="0 0 0.06">
+      <geom type="sphere" size="0.004" pos="0.236 0.245 -0.02" material="gunmetal"/>
+    </replicate>
+
+    <!-- war-movie paraphernalia -->
+    <geom name="ammo_crate" type="box" pos="0.24 -0.02 -0.105" size="0.055 0.075 0.040"
+          material="olive"/>
+    <geom name="crate_stencil" type="box" pos="0.24 -0.097 -0.10" size="0.045 0.002 0.026"
+          material="crate_mat"/>
+    <geom name="crate_rope" type="capsule" fromto="0.20 -0.06 -0.065 0.28 -0.06 -0.065"
+          size="0.004" material="rubber"/>
+    <geom name="helmet" type="ellipsoid" pos="0.24 -0.02 -0.052" size="0.038 0.046 0.026"
+          material="olive"/>
+    <geom name="helmet_rim" type="cylinder" pos="0.24 -0.02 -0.062" size="0.047 0.004"
+          material="olive"/>
+    <geom name="shell1" type="cylinder" pos="-0.20 -0.16 -0.140" size="0.006 0.020"
+          euler="90 0 15" material="brass"/>
+    <geom name="shell2" type="cylinder" pos="-0.24 -0.12 -0.140" size="0.006 0.020"
+          euler="90 0 70" material="brass"/>
+    <geom name="shell3" type="cylinder" pos="-0.17 -0.10 -0.140" size="0.006 0.020"
+          euler="90 0 40" material="brass"/>
+    <geom name="dogtag_chain" type="capsule" fromto="-0.17 0.152 -0.052 -0.165 0.145 -0.082"
+          size="0.0015" material="metal"/>
+    <geom name="dogtag1" type="box" pos="-0.165 0.145 -0.090" size="0.007 0.002 0.010"
+          material="metal"/>
+    <geom name="dogtag2" type="box" pos="-0.162 0.148 -0.093" size="0.007 0.002 0.010"
+          euler="0 0 12" material="metal"/>
+
+    <!-- wall art: kill tally + war posters -->
+    <geom name="tally_plate" type="box" pos="0.366 0.115 0.135" size="0.004 0.055 0.033"
+          material="tally_mat"/>
+    <geom name="poster_apoc" type="box" pos="0.366 -0.04 0.24" size="0.004 0.052 0.072"
+          material="poster1_mat"/>
+    <geom name="poster_wings" type="box" pos="0.366 -0.215 0.21" size="0.004 0.047 0.060"
+          material="poster2_mat"/>
+
     <!-- controls, placed under the fly's front claws -->
     <body name="lever_left" pos="-{CLAW_X} {CLAW_Y} {CLAW_Z - 0.09}">
       <joint name="lever_left" type="hinge" axis="1 0 0"
@@ -236,26 +305,93 @@ def _build_model(with_fly: bool) -> mujoco.MjModel:
     return spec.compile()
 
 
-def _paint_nameplate(model: mujoco.MjModel) -> None:
-    """Draw the mission nameplate into its texture (before renderer creation,
-    so it uploads with the GL context)."""
-    img = Image.new("RGB", (PLATE_W, PLATE_H), (12, 12, 15))
-    draw = ImageDraw.Draw(img)
+def _font(size: int):
     try:
-        font = ImageFont.load_default(size=34)
+        return ImageFont.load_default(size=size)
     except TypeError:
-        font = ImageFont.load_default()
-    text = "NO-FLY-ZONE"
+        return ImageFont.load_default()
+
+
+def _center_text(draw, img_w, y, text, font, fill):
     box = draw.textbbox((0, 0), text, font=font)
-    draw.text(((PLATE_W - box[2] + box[0]) / 2, (PLATE_H - box[3] + box[1]) / 2),
-              text, font=font, fill=(255, 120, 40))
-    draw.rectangle([2, 2, PLATE_W - 3, PLATE_H - 3], outline=(90, 40, 15), width=2)
-    # the plate's visible face (-x, on the starboard wall) mirrors the texture
-    img = img.transpose(Image.FLIP_LEFT_RIGHT)
-    tex_id = model.texture("plate").id
-    adr = model.tex_adr[tex_id]
-    model.tex_data[adr: adr + PLATE_W * PLATE_H * 3] = np.asarray(
-        img, dtype=np.uint8).ravel()
+    draw.text(((img_w - box[2] + box[0]) / 2, y), text, font=font, fill=fill)
+
+
+def _paint_plate(img, draw, w, h):
+    _center_text(draw, w, (h - 40) / 2, "NO-FLY-ZONE", _font(34), (255, 120, 40))
+    draw.rectangle([2, 2, w - 3, h - 3], outline=(90, 40, 15), width=2)
+
+
+def _paint_tally(img, draw, w, h):
+    _center_text(draw, w, 6, "CONFIRMED SWATS", _font(12), (210, 210, 200))
+    y0, y1 = 34, 78
+    x = 14
+    for group in range(2):  # two gates of five
+        for i in range(4):
+            draw.line([x + i * 9, y0, x + i * 9, y1], fill=(225, 225, 215), width=3)
+        draw.line([x - 5, y1 - 4, x + 32, y0 + 4], fill=(225, 225, 215), width=3)
+        x += 52
+    draw.rectangle([1, 1, w - 2, h - 2], outline=(60, 60, 55), width=2)
+
+
+def _paint_poster_apoc(img, draw, w, h):
+    for i in range(90):  # sunset gradient
+        t = i / 90
+        draw.line([0, i, w, i],
+                  fill=(int(230 - 140 * t), int(110 - 80 * t), int(20 * (1 - t))))
+    draw.ellipse([w / 2 - 30, 22, w / 2 + 30, 82], fill=(250, 160, 40))
+    draw.rectangle([0, 90, w, h], fill=(15, 10, 8))
+    for cx, cy in ((30, 40), (85, 26)):  # gunship dragonflies
+        draw.ellipse([cx - 9, cy - 2, cx + 9, cy + 2], fill=(20, 12, 8))
+        draw.line([cx - 12, cy - 5, cx + 12, cy - 5], fill=(20, 12, 8), width=2)
+    _center_text(draw, w, 102, "APOCALYPSE", _font(19), (245, 200, 120))
+    _center_text(draw, w, 124, "FLY NOW", _font(19), (245, 200, 120))
+    _center_text(draw, w, 152, "the horror has six legs", _font(10), (170, 120, 70))
+
+
+def _paint_poster_wings(img, draw, w, h):
+    draw.rectangle([4, 4, w - 5, h - 5], outline=(225, 215, 180), width=3)
+    _center_text(draw, w, 14, "LOOSE WINGS", _font(17), (235, 225, 190))
+    # a wing sinking into the waves
+    draw.ellipse([w / 2 - 26, 52, w / 2 + 26, 78], outline=(235, 225, 190), width=3)
+    draw.line([w / 2 - 26, 66, w / 2 + 26, 62], fill=(235, 225, 190), width=2)
+    for y in (86, 94):
+        for x in range(10, w - 10, 16):
+            draw.arc([x, y - 4, x + 16, y + 6], 200, 340, fill=(120, 140, 170), width=2)
+    _center_text(draw, w, 106, "SINK SHIPS", _font(17), (235, 225, 190))
+    _center_text(draw, w, 134, "MINISTRY OF WING SAFETY", _font(9), (150, 150, 140))
+
+
+def _paint_crate(img, draw, w, h):
+    stencil = (25, 22, 15)
+    _center_text(draw, w, 8, "SUGAR RATIONS", _font(15), stencil)
+    _center_text(draw, w, 32, "GRADE A - 7.62 mmol", _font(11), stencil)
+    draw.rectangle([2, 2, w - 3, h - 3], outline=stencil, width=2)
+
+
+_DECALS = {
+    # tex name: (width, height, background, painter, mirror)
+    # wall decals face -x, which mirrors the texture -> pre-flip
+    "plate": (PLATE_W, PLATE_H, (12, 12, 15), _paint_plate, True),
+    "tally": (128, 96, (26, 26, 23), _paint_tally, True),
+    "poster1": (128, 176, (26, 13, 8), _paint_poster_apoc, True),
+    "poster2": (128, 160, (13, 18, 31), _paint_poster_wings, True),
+    "crate": (128, 64, (51, 56, 38), _paint_crate, False),  # faces -y
+}
+
+
+def _paint_decals(model: mujoco.MjModel) -> None:
+    """Draw all decal textures (before renderer creation, so they upload
+    with the GL context)."""
+    for name, (w, h, bg, painter, mirror) in _DECALS.items():
+        img = Image.new("RGB", (w, h), bg)
+        painter(img, ImageDraw.Draw(img), w, h)
+        if mirror:
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+        tex_id = model.texture(name).id
+        adr = model.tex_adr[tex_id]
+        model.tex_data[adr: adr + w * h * 3] = np.asarray(
+            img, dtype=np.uint8).ravel()
 
 
 class Cockpit:
@@ -283,7 +419,7 @@ class Cockpit:
         self._lamp_id = self.model.geom("lamp").id
         self._jnt = {name: self.model.joint(name).qposadr[0]
                      for name in ("lever_left", "lever_right", "fire_button")}
-        _paint_nameplate(self.model)
+        _paint_decals(self.model)
         mujoco.mj_forward(self.model, self.data)
         self._renderer = mujoco.Renderer(self.model, height=render_height,
                                          width=render_width)
