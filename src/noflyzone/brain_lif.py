@@ -52,8 +52,74 @@ def annotations() -> pd.DataFrame:
     return _annotations_cache
 
 
+ABLATIONS = ("none", "rewired", "silenced")
+SENSORY_MODES = ("free", "external_only")
+SENSORY_CLASSES = ("sensory", "sensory_ascending")
+SIGN_MODES = ("predicted", "known_first")
+AMINERGIC_MODES = ("excitatory", "zero")
+NT_INHIBITORY = ("gaba", "glutamate", "histamine")
+NT_EXCITATORY = ("acetylcholine",)
+NT_AMINERGIC = ("dopamine", "octopamine", "serotonin")
+
+
+def transmitter_per_cell(root_ids: np.ndarray, prefer_known: bool) -> np.ndarray:
+    """One transmitter label per cell: the literature-known one (first token
+    of `known_nt`) when prefer_known and it is one of the seven classes,
+    else the FlyWire prediction `top_nt`."""
+    ann = annotations().drop_duplicates("root_id").set_index("root_id").reindex(root_ids)
+    top = ann["top_nt"].astype(str).str.lower().to_numpy()
+    if not prefer_known:
+        return top
+    known = (ann["known_nt"].astype(str).str.lower()
+             .str.split(r"[;,]").str[0].str.strip().to_numpy())
+    ok = np.isin(known, NT_INHIBITORY + NT_EXCITATORY + NT_AMINERGIC)
+    return np.where(ok, known, top)
+
+
 class ShiuBrain:
-    def __init__(self, version: str = "783", seed: int = 0):
+    def __init__(self, version: str = "783", seed: int = 0,
+                 ablate: str = "none", ablate_seed: int = 0,
+                 sensory_input: str = "free", signs: str = "predicted",
+                 aminergic: str = "excitatory"):
+        """ablate: "none" is the measured wiring; "rewired" permutes every
+        edge's postsynaptic target with a seeded RNG (each presynaptic cell
+        keeps its out-degree, synapse counts and transmitter sign, the
+        topology is destroyed); "silenced" zeroes all weights. Controls for
+        any claim that the wiring matters.
+
+        sensory_input: "free" is the reference model, where primary sensory
+        neurons (photoreceptors, olfactory and other receptor neurons; the
+        sensory super-classes) are ordinary LIF units that central feedback
+        can drive. "external_only" zeroes every synapse ONTO those neurons,
+        so they fire only when their sense organ is driven (Poisson input).
+        Motivation, 2026-09-14: a strong visual event tips the reference model
+        into a self-sustaining olfactory state (receptor neurons, antennal
+        lobe local neurons, Kenyon cells, APL and DPM at 400+ Hz) that
+        persists indefinitely in darkness.
+
+        signs: "predicted" keeps the file's signs (FlyWire top_nt: GABA and
+        glutamate -1, everything else +1). "known_first" re-signs every
+        presynaptic cell whose literature transmitter is known: GABA,
+        glutamate, histamine -1; acetylcholine +1; amines per `aminergic`.
+        aminergic: "excitatory" is the reference (dopamine, octopamine,
+        serotonin as fast +1 synapses); "zero" removes their fast weight —
+        they are slow modulators, and as +1 synapses the ~300 PAM dopamine
+        cells close a Kenyon-cell -> PAM -> Kenyon-cell loop that sustains
+        the persistent state above. Every option is recorded in `meta`."""
+        if ablate not in ABLATIONS:
+            raise ValueError(f"ablate must be one of {ABLATIONS}")
+        if sensory_input not in SENSORY_MODES:
+            raise ValueError(f"sensory_input must be one of {SENSORY_MODES}")
+        if signs not in SIGN_MODES or aminergic not in AMINERGIC_MODES:
+            raise ValueError("bad signs/aminergic option")
+        self.ablate = ablate
+        self.ablate_seed = ablate_seed
+        self.sensory_input = sensory_input
+        self.signs = signs
+        self.aminergic = aminergic
+        self.meta = {"version": version, "ablate": ablate, "ablate_seed": ablate_seed,
+                     "sensory_input": sensory_input, "signs": signs,
+                     "aminergic": aminergic}
         comp = pd.read_csv(SHIU / f"Completeness_{version}.csv")
         self.root_ids = comp.iloc[:, 0].to_numpy(dtype=np.int64)
         self.n = len(self.root_ids)
@@ -63,10 +129,34 @@ class ShiuBrain:
             columns=["Presynaptic_Index", "Postsynaptic_Index",
                      "Excitatory x Connectivity"])
         w = (con["Excitatory x Connectivity"].to_numpy(np.float32) * W_SYN)
-        self.W = sparse.csc_matrix(
-            (w, (con["Postsynaptic_Index"].to_numpy(np.int64),
-                 con["Presynaptic_Index"].to_numpy(np.int64))),
-            shape=(self.n, self.n))
+        post = con["Postsynaptic_Index"].to_numpy(np.int64)
+        pre = con["Presynaptic_Index"].to_numpy(np.int64)
+        if signs == "known_first" or aminergic == "zero":
+            # literature transmitter first: the FlyWire prediction calls every
+            # Kenyon cell dopaminergic, and they are cholinergic
+            nt = transmitter_per_cell(self.root_ids, prefer_known=True)
+            counts = np.abs(w)
+            if signs == "known_first":
+                sign = np.where(np.isin(nt, NT_INHIBITORY), -1.0,
+                                np.where(np.isin(nt, NT_EXCITATORY), 1.0, np.nan))
+                cell_sign = sign[pre]
+                w = np.where(np.isnan(cell_sign), w, counts * cell_sign).astype(np.float32)
+                self.meta["resigned_edges"] = int((~np.isnan(cell_sign)).sum())
+            if aminergic == "zero":
+                am = np.isin(nt, NT_AMINERGIC)[pre]
+                w = np.where(am, 0.0, w).astype(np.float32)
+                self.meta["aminergic_edges_zeroed"] = int(am.sum())
+        if ablate == "rewired":
+            post = np.random.default_rng(ablate_seed).permutation(post)
+        elif ablate == "silenced":
+            w = np.zeros_like(w)
+        if sensory_input == "external_only":
+            ann = annotations().drop_duplicates("root_id").set_index("root_id")
+            sclass = ann["super_class"].reindex(self.root_ids).astype(str).to_numpy()
+            sensory = np.isin(sclass, SENSORY_CLASSES)
+            self.n_sensory_deafferented = int(sensory.sum())
+            w = np.where(sensory[post], 0.0, w).astype(np.float32)
+        self.W = sparse.csc_matrix((w, (post, pre)), shape=(self.n, self.n))
         self._decay_m = np.float32(np.exp(-DT / T_MBR))
         self._decay_s = np.float32(np.exp(-DT / TAU_SYN))
         self._b_coef = np.float32(TAU_SYN / (TAU_SYN - T_MBR))

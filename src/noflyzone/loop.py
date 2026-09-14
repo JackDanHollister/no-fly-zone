@@ -24,12 +24,26 @@ LAMP_FLASH_SECONDS = 0.5
 
 
 class PilotLoop:
-    def __init__(self, brain=None, seed: int | None = 0):
+    def __init__(self, brain=None, seed: int | None = 0,
+                 retina_zoom: float = 1.0,
+                 retina_center: tuple[float, float] = (0.5, 0.5),
+                 eye_offset: float = 0.0):
+        """eye_offset: each eye's retina window is shifted sideways by this
+        fraction of the image (left eye leftwards, right eye rightwards), so
+        the two eyes see different parts of the screen with binocular overlap
+        in the middle — the only way a left/right readout can lateralise,
+        since both eye cameras render the same CRT."""
         self.game = BattleZone(seed=seed)
         self.dt = self.game.dt
         self.cockpit = Cockpit()
-        self.retina = HexRetina(image_shape=(self.cockpit.render_height,
-                                             self.cockpit.render_width))
+        shape = (self.cockpit.render_height, self.cockpit.render_width)
+        cx, cy = retina_center
+        self.retina = HexRetina(image_shape=shape, zoom=retina_zoom,
+                                center=(cx - eye_offset, cy))
+        self.retina_right = HexRetina(image_shape=shape, zoom=retina_zoom,
+                                      center=(cx + eye_offset, cy)) \
+            if eye_offset else self.retina
+        self.eye_offset = eye_offset
         if brain is None:
             from .brain_stub import ReflexBrain
             brain = ReflexBrain(retina_x=self.retina.centers_x)
@@ -63,7 +77,7 @@ class PilotLoop:
         eye_r = self._timed("render", self.cockpit.render, cam_r)
         rgb = {
             "left": self._timed("retina", self.retina.sample, eye_l),
-            "right": self._timed("retina", self.retina.sample, eye_r),
+            "right": self._timed("retina", self.retina_right.sample, eye_r),
         }
         drives = {side: self.retina.photoreceptors(s) for side, s in rgb.items()}
 
@@ -85,13 +99,16 @@ class PilotLoop:
         lines = []
         step_total = 0.0
         for stage, samples in self.timings.items():
+            if not samples:
+                continue
             ms = 1000.0 * float(np.mean(samples))
             per_step = ms * (2 if stage in ("render", "retina") else 1)
             step_total += per_step
             lines.append(f"  {stage:<8} {ms:7.2f} ms" +
                          (" (x2/step)" if per_step != ms else ""))
-        lines.append(f"  {'total':<8} {step_total:7.2f} ms/step "
-                     f"(~{1000.0 / step_total:.0f} Hz)")
+        if step_total > 0:
+            lines.append(f"  {'total':<8} {step_total:7.2f} ms/step "
+                         f"(~{1000.0 / step_total:.0f} Hz)")
         return "\n".join(lines)
 
     def close(self) -> None:

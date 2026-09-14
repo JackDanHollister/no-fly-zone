@@ -8,11 +8,12 @@ reproduce the published behavior?
    drive DNp01 (the escape circuit our pilot uses).
 """
 
+import argparse
 import time
 
 import numpy as np
 
-from noflyzone.brain_lif import ShiuBrain
+from noflyzone.brain_backend import BACKENDS, describe, make_brain
 
 SUGAR_GRN_IDS = [  # Shiu et al. example.ipynb, FlyWire v630/783
     720575940611875570, 720575940612670570, 720575940616885538,
@@ -27,10 +28,13 @@ MN9_ID = 720575940660219265
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--backend", choices=BACKENDS, default="auto")
+    args = ap.parse_args()
     t0 = time.time()
     print("loading connectome (138k neurons, 15.1M edges)...", flush=True)
-    brain = ShiuBrain()
-    print(f"loaded in {time.time() - t0:.0f} s")
+    brain = make_brain(args.backend)
+    print(f"loaded in {time.time() - t0:.0f} s | backend {describe(brain)}")
 
     # 1 — silence control
     brain.reset()
@@ -49,7 +53,7 @@ def main() -> None:
     t0 = time.time()
     counts = brain.run(1.0, progress_every=2500)
     mn9_rate = counts[mn9_idx[0]]
-    print(f"    1 s sim in {time.time() - t0:.0f} s wall; "
+    print(f"    1 s sim in {time.time() - t0:.1f} s wall; "
           f"network spikes {counts.sum()}, neurons active "
           f"{(counts > 0).sum()}")
     print(f"    MN9 rate: {mn9_rate} Hz "
@@ -63,9 +67,11 @@ def main() -> None:
     print(f"\n[3] LC4 neurons: {len(lc4_idx)}, DNp01 (GF): {len(gf_idx)}")
     brain.reset()
     brain.set_poisson({int(i): 100.0 for i in lc4_idx})
+    t0 = time.time()
     counts = brain.run(0.5, progress_every=2500)
     gf_rates = counts[gf_idx] * 2  # 0.5 s -> Hz
-    print(f"    GF rates under LC4 looming drive: {list(gf_rates)} Hz")
+    print(f"    0.5 s sim in {time.time() - t0:.1f} s wall")
+    print(f"    GF rates under LC4 looming drive: {[int(r) for r in gf_rates]} Hz")
     assert gf_rates.max() > 0, "Giant Fiber silent under LC4 drive"
 
     print("\nPASS: LIF core reproduces silence, feeding, and escape behavior")

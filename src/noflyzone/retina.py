@@ -14,8 +14,14 @@ WHITE_REF = 255.0
 
 
 class HexRetina:
-    def __init__(self, n_rings: int = 15, image_shape: tuple[int, int] = (240, 320)):
+    def __init__(self, n_rings: int = 15, image_shape: tuple[int, int] = (240, 320),
+                 zoom: float = 1.0, center: tuple[float, float] = (0.5, 0.5)):
+        """zoom > 1 lays the lattice over the central 1/zoom of the image
+        (a foveal view: the fly leans in), centred at `center` as image
+        fractions (x, y). zoom 1 is the whole image."""
         self.image_shape = image_shape
+        self.zoom = zoom
+        self.center = center
         centers = []
         for q in range(-n_rings, n_rings + 1):
             r_lo = max(-n_rings, -q - n_rings)
@@ -33,10 +39,10 @@ class HexRetina:
 
         # scale lattice to the largest disc that fits the image, centred
         h, w = image_shape
-        radius = min(h, w) / 2.0
+        radius = min(h, w) / 2.0 / zoom
         lattice_radius = np.abs(centers).max() * 1.05
         centers = centers / lattice_radius * radius
-        centers += np.array([w / 2.0, h / 2.0])
+        centers += np.array([w * center[0], h * center[1]])
 
         ys, xs = np.mgrid[0:h, 0:w]
         pixels = np.column_stack([xs.ravel(), ys.ravel()]).astype(np.float64)

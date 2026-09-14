@@ -23,8 +23,9 @@ step(drives, dt, signals) -> DN rates + reset(), same as the reflex stub:
   does not exist in this brain — the FIRE trigger is the oviposition
   descending neurons (oviDN*): she shoots when broody.
 
-The full brain runs ~5x slower than real time on Mac CPU — a dignified
-slow-motion pilot until the 4090.
+On the CPU backend the full brain runs ~8x slower than real time (Mac and
+workstation alike); the CUDA backend (brain_cuda) replays the tick as one
+graph.
 """
 
 import numpy as np
@@ -35,23 +36,86 @@ from .brain_lif import DT, ShiuBrain, annotations
 
 MAX_PR_RATE = 150.0  # Hz at full-white, the reference model's default drive
 
-# (cell type, drive mode, gain in Hz at full-scale signal)
-INJECTION_SITES = [
-    ("R1-6", "lum", MAX_PR_RATE),
-    ("Mi1", "on", 3000.0),   # medulla ON channel: luminance increments
-    ("Tm1", "off", 3000.0),  # medulla OFF channels: luminance decrements
-    ("Tm2", "off", 2000.0),
-]
+# Named injection maps: (cell type, drive mode, gain in Hz at full-scale
+# signal). Modes: "lum" = luminance, "on" = rectified luminance increment,
+# "off" = rectified decrement, "onoff" = |change|. Which map a run used is
+# part of its provenance (describe()); see docs/research/cascade-probe-*.md.
+INJECTION_MAPS = {
+    # the M3/M4 map: retina context plus ON/OFF transients at three types
+    "v0": [
+        ("R1-6", "lum", MAX_PR_RATE),
+        ("Mi1", "on", 3000.0),   # medulla ON channel: luminance increments
+        ("Tm1", "off", 3000.0),  # medulla OFF channels: luminance decrements
+        ("Tm2", "off", 2000.0),
+    ],
+    # the full columnar inputs of T4 (Mi1, Tm3) and T5 (Tm1, Tm2, Tm4, Tm9)
+    "v1": [
+        ("R1-6", "lum", MAX_PR_RATE),
+        ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+        ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+        ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+    ],
+    # v1 plus the small-object relays that feed LC11 (T2, T3, T2a) and the
+    # loom relay input TmY3 (LC4), all as rectified transients
+    "v2": [
+        ("R1-6", "lum", MAX_PR_RATE),
+        ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+        ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+        ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+        ("T2", "onoff", 3000.0), ("T3", "onoff", 3000.0),
+        ("T2a", "onoff", 3000.0), ("TmY3", "onoff", 2000.0),
+    ],
+    # v1 plus the LC11 small-object inputs that do not also feed the LC4 loom
+    # detector (T3, T2a); T2 and TmY3 are left out so a small object does not
+    # fire the giant-fibre escape
+    "v3": [
+        ("R1-6", "lum", MAX_PR_RATE),
+        ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+        ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+        ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+        ("T3", "onoff", 3000.0), ("T2a", "onoff", 3000.0),
+    ],
+    # v1 plus T3 only: T2a also drives DNp01 (escape) via LC15/LC17
+    "v4": [
+        ("R1-6", "lum", MAX_PR_RATE),
+        ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+        ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+        ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+        ("T3", "onoff", 3000.0),
+    ],
+}
+INJECTION_SITES = INJECTION_MAPS["v0"]
 TRANSIENT_CAP = 400.0  # Hz ceiling on injected transient rates
 
-# dn.py contract name -> (annotation selector kind, value, sides)
-READOUT = {
-    "DNa02_L": ("cell_type", "DNa02", ("left",)),
-    "DNa02_R": ("cell_type", "DNa02", ("right",)),
-    "DNg100": ("cell_type", "DNg100", None),
-    "pIP10": ("cell_type_prefix", "oviDN", None),  # female stand-in, see above
-    "DNp01": ("cell_type", "DNp01", None),
+# Named readout maps: dn.py contract name -> list of selectors
+# (kind, value, sides); a pool's rate is the mean over all its cells.
+# Special kind "min_of" takes the minimum of two other contract rates.
+STEER_POOL = ["DNp07", "DNb05", "DNg52", "DNb06", "DNa02"]
+# DNp12 is the loom-selective type in the screen (24 Hz loom, 0.6 Hz small
+# object); DNbe001 was dropped because it also fires for a tank sitting ahead
+LOOM_POOL = ["DNp12", "DNp01"]
+READOUT_MAPS = {
+    # the M3/M4 map: single named cells
+    "v0": {
+        "DNa02_L": [("cell_type", "DNa02", ("left",))],
+        "DNa02_R": [("cell_type", "DNa02", ("right",))],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("cell_type_prefix", "oviDN", None)],  # female stand-in
+        "DNp01": [("cell_type", "DNp01", None)],
+    },
+    # from the 2026-09-14 DN screen with injection v4: the descending types
+    # that fire on the same side as a small object (steer pools, one per
+    # side), DNg100 for drive, the loom-selective types for the startle, and
+    # FIRE when both steer pools fire at once (object straight ahead)
+    "pool4": {
+        "DNa02_L": [("cell_type", t, ("left",)) for t in STEER_POOL],
+        "DNa02_R": [("cell_type", t, ("right",)) for t in STEER_POOL],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
+        "DNp01": [("cell_type", t, None) for t in LOOM_POOL],
+    },
 }
+READOUT = READOUT_MAPS["v0"]
 
 
 def _pca2d(pos: np.ndarray) -> np.ndarray:
@@ -68,8 +132,12 @@ def _pca2d(pos: np.ndarray) -> np.ndarray:
 
 
 class ConnectomeBrain:
-    def __init__(self, retina, brain: ShiuBrain | None = None, seed: int = 0):
+    def __init__(self, retina, brain: ShiuBrain | None = None, seed: int = 0,
+                 injection: str = "v0", readout: str = "v0"):
         self.brain = brain if brain is not None else ShiuBrain(seed=seed)
+        self.injection = injection
+        self.sites = INJECTION_MAPS[injection]
+        self.readout = readout
         ann = annotations()
 
         # retinotopic injection map: per (population, eye)
@@ -77,7 +145,7 @@ class ConnectomeBrain:
         tree = cKDTree(retina.centers_xy)
         chunks = []
         start = 0
-        for cell_type, mode, gain in INJECTION_SITES:
+        for cell_type, mode, gain in self.sites:
             for side in ("left", "right"):
                 rows = ann[(ann["cell_type"] == cell_type)
                            & (ann["side"] == side)]
@@ -97,17 +165,27 @@ class ConnectomeBrain:
         self._prev_lum: dict[str, np.ndarray | None] = {"left": None,
                                                         "right": None}
 
-        self._readout = {}
-        for name, (kind, value, sides) in READOUT.items():
-            rows = ann[ann["cell_type"].astype(str).str.startswith(value)] \
-                if kind == "cell_type_prefix" else ann[ann["cell_type"] == value]
-            if sides is not None:
-                rows = rows[rows["side"].isin(sides)]
-            idx, _ = self.brain.indices_of(rows["root_id"].to_numpy())
+        self._readout: dict[str, np.ndarray] = {}
+        self._derived: dict[str, tuple[str, tuple[str, str]]] = {}
+        for name, specs in READOUT_MAPS[readout].items():
+            parts = []
+            for kind, value, sides in specs:
+                if kind == "min_of":
+                    self._derived[name] = ("min_of", value)
+                    continue
+                rows = ann[ann["cell_type"].astype(str).str.startswith(value)] \
+                    if kind == "cell_type_prefix" else ann[ann["cell_type"] == value]
+                if sides is not None:
+                    rows = rows[rows["side"].isin(sides)]
+                idx, _ = self.brain.indices_of(rows["root_id"].to_numpy())
+                parts.append(idx)
+            if name in self._derived:
+                continue
+            idx = np.concatenate(parts) if parts else np.empty(0, np.int64)
             if len(idx) == 0:
                 raise RuntimeError(f"no neurons found for DN readout {name}")
             self._readout[name] = idx
-        assert set(self._readout) == set(dn.DN_NAMES)
+        assert set(self._readout) | set(self._derived) == set(dn.DN_NAMES)
 
         self.window_counts = np.zeros(self.brain.n, np.int32)
         self._register()
@@ -115,10 +193,12 @@ class ConnectomeBrain:
     def describe(self) -> str:
         pops = {}
         for (mode, _, sl, _, side), (ct, _, _) in zip(
-                self._pops, [s for s in INJECTION_SITES for _ in (0, 1)]):
+                self._pops, [s for s in self.sites for _ in (0, 1)]):
             pops[f"{ct}/{side}"] = sl.stop - sl.start
         ro = {k: len(v) for k, v in self._readout.items()}
-        return f"injection {pops}, readouts {ro}"
+        ro.update({k: f"{v[0]}{v[1]}" for k, v in self._derived.items()})
+        return (f"injection map {self.injection} {pops}, "
+                f"readout map {self.readout} {ro}")
 
     def _register(self) -> None:
         self.brain.set_poisson({int(i): 0.0 for i in self._pr_all})
@@ -142,20 +222,30 @@ class ConnectomeBrain:
                 sig = lum[side][omm]
             elif mode == "on":
                 sig = np.clip(delta[side][omm], 0.0, None)
-            else:  # off
+            elif mode == "off":
                 sig = np.clip(-delta[side][omm], 0.0, None)
+            else:  # onoff: any change
+                sig = np.abs(delta[side][omm])
             self._rates[sl] = np.minimum(sig * gain, TRANSIENT_CAP)
         self.brain.update_rates(self._rates)
 
         counts = self.window_counts
-        counts[:] = 0
-        for _ in range(round(dt / DT)):
-            spk = self.brain.step()
-            if spk.size:
-                counts[spk] += 1
+        n_steps = round(dt / DT)
+        run_counts = getattr(self.brain, "run_counts", None)
+        if run_counts is not None:          # GPU backend: one graph replay
+            counts[:] = run_counts(n_steps)
+        else:
+            counts[:] = 0
+            for _ in range(n_steps):
+                spk = self.brain.step()
+                if spk.size:
+                    counts[spk] += 1
 
-        return {name: float(counts[idx].mean() / dt)
-                for name, idx in self._readout.items()}
+        rates = {name: float(counts[idx].mean() / dt)
+                 for name, idx in self._readout.items()}
+        for name, (kind, (a, b)) in self._derived.items():
+            rates[name] = min(rates[a], rates[b])
+        return rates
 
 
 class BrainView:

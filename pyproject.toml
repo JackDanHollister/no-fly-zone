@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
+cuda = ["torch>=2.5"]  # brain_cuda: Triton kernels + CUDA graphs (Linux/NVIDIA)
 
 [build-system]
 requires = ["setuptools>=68"]
