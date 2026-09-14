@@ -3,19 +3,51 @@
 A real fruit-fly connectome fighting for its life in a tank it was never
 licensed to drive.
 
-![The connectome pilot turning toward a tank, firing, and backing off from the loom](docs/media/demo.gif)
+![The connectome pilot firing at a tank, scoring, and backing off from the loom](docs/media/demo.gif)
 
-*Left: the fly seated at the CRT, with the one she is fighting for pinned to
-the wall. Middle: Atari Battlezone. Right: 138,639 neurons, spikes glowing.
-Bottom: the descending neurons it is read out from. Everything on the footer
-is a named, measured mapping.*
+*Real time, seed 0, the measured FlyWire wiring with the corrections listed
+below. Left: the fly seated at the CRT, with the one she is fighting for
+pinned to the wall. Middle: Atari Battlezone. Right: 138,639 neurons, spikes
+glowing. Bottom: the descending neurons it is read out from; everything on the
+footer is a named, measured mapping.*
 
-The complete Drosophila brain wiring diagram (FlyWire v783 today, 138,639
-neurons; MaleCNS planned) runs as a spiking simulation and is seated as the **pilot** inside a
-retro-futuristic 3D cockpit. The cockpit's screen shows Atari **Battlezone**;
-the fly's compound eyes watch that screen; its descending motor neurons work
-the cockpit controls; the controls drive the game. Fly → cockpit → tank →
-robot war.
+**The complete FlyWire v783 female fruit-fly brain, 138,639 neurons and 15.1
+million synapses, spiking on a CUDA backend at five times real time, pilots
+an Atari Battlezone tank through its own eyes and its own descending
+neurons.** Not the Google/Janelia male map; that loader is planned.
+
+**Status, honestly: it fires at tanks that come into view, backs off from
+loom, turns toward targets, and scores about one kill per 30 seconds. A
+degree-preserving random rewiring of the same brain scores the same. A
+trained readout on top of it learns to survive but not to kill. The wiring
+is not yet shown to matter.**
+
+The brain runs as a leaky integrate-and-fire network over the measured
+wiring and is seated as the **pilot** inside a retro-futuristic 3D cockpit.
+The cockpit's screen shows Atari **Battlezone**; the fly's compound eyes watch
+that screen; its descending motor neurons work the cockpit controls; the
+controls drive the game. Fly → cockpit → tank → robot war.
+
+## What is measured, what is modelled, what is not claimed
+
+- **Measured:** every neuron and synapse count of FlyWire v783, the
+  literature transmitter of each cell where known, the descending-neuron
+  types that fire on the same side as an object (found by a screen, not
+  chosen), and every number in this README, on the machine that ran it.
+- **Modelled:** Shiu et al. 2024 LIF dynamics with predicted synapse signs;
+  two corrections, both off by default and recorded on every run: aminergic
+  synapses carry no fast weight (otherwise the reference model has a
+  self-sustaining olfactory state), and primary sensory neurons fire only
+  from injected input. The retina is a hex lattice over the CRT; the
+  medulla injection map, the readout pools, the calibration spans, the
+  saccadic gating and the steering rule are engineered and named on the HUD.
+  Levers are a kinematic puppet.
+- **Not claimed:** that the fly learns (the two learning experiments and
+  their controls are in `docs/research/learning-2026-09-14.md`), that the
+  wiring beats a random graph on this task, that the mushroom body is in the
+  loop, or anything about consciousness. Every video is closed-loop unless
+  its footer says otherwise; there is no replay footage in this repository.
+- **No token, no coin, ever.**
 
 ## Status
 
@@ -212,6 +244,21 @@ carries its own terms: the Shiu et al. brain model and connectivity are MIT;
 FlyWire v783 is CC-BY-NC 4.0; the flywire annotations are from the Jefferis
 lab; the flybody model is Apache-2.0 from MuJoCo Menagerie; the Atari ROM
 ships legally inside `ale-py`.
+
+## Running it
+
+```bash
+git clone https://github.com/JackDanHollister/no-fly-zone && cd no-fly-zone
+python3.12 -m venv .venv && .venv/bin/pip install -e ".[dev]" -c constraints.txt
+.venv/bin/pytest                          # no data or GPU needed for the unit tests
+.venv/bin/python scripts/fetch_assets.py  # ~570 MB: fly body, connectome, annotations
+.venv/bin/pytest -m data                  # the brain gates, CPU or CUDA
+```
+
+`constraints.txt` is the exact package set the workstation results were
+measured with; without it, recent `mujoco`, `ale-py` and `gymnasium` should
+still work. The CUDA backend needs `pip install -e ".[cuda]"` and an NVIDIA
+GPU; everything else runs on CPU, slowly.
 
 ## How this was built
 
