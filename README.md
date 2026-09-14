@@ -33,6 +33,24 @@ Two pilot modes, same brain and eyes:
   cockpit, motor neurons → leg actuators → contact forces on the levers
   (the over-the-top goal)
 
+## Quickstart (any machine)
+
+```bash
+git clone https://github.com/JackDanHollister/no-fly-zone
+cd no-fly-zone
+python3 -m venv .venv                 # python >= 3.11
+.venv/bin/pip install -e .            # ale-py bundles the Atari ROMs legally
+.venv/bin/python scripts/fetch_assets.py   # fly body + connectome data, ~570 MB
+.venv/bin/python scripts/smoke_battlezone.py
+.venv/bin/python scripts/smoke_cockpit_screen.py
+.venv/bin/python scripts/run_m2.py --video          # reflex-stub pilot, fast
+.venv/bin/python scripts/validate_brain.py          # LIF core vs published results
+.venv/bin/python scripts/run_m3.py --steps 150 --video  # the real connectome plays
+```
+
+Videos and renders land in `out/`. macOS-only gotcha: if `import noflyzone`
+fails after installing, see the `.pth` note in `docs/architecture.md`.
+
 ## Machines
 
 - **Dev**: Apple-silicon Mac — everything runs here (MuJoCo has native arm64
