@@ -1,5 +1,53 @@
 # Changelog
 
+## [2026-09-14] - Learning results: readouts learn to survive, not to kill; the mushroom body cannot see
+
+- PPO readouts (410k ticks each): kills flat at about one per episode for
+  the connectome, rewired and retina heads; deaths fell from about three to
+  1.2, 0.7 and 1.4. Greedy evaluation on four fresh seeds
+  (`scripts/eval_readout.py`): connectome head 2.25 kills / 0.25 deaths,
+  rewired 0.38 / 0.38, retina 0.88 / 0.38, random actions 2.25 / 3.38, reflex
+  pilot 1.25 / 2.62. The connectome head alone kept its kill rate while
+  surviving; one training seed, so suggestive only.
+- Mushroom-body plasticity, rule on versus LR-zero, 48 episodes each: 74 of
+  62,261 synapses changed, behaviour identical within noise. Cause measured:
+  the calyx-projecting visual neurons that fire (aMe12, 7 cells) give each
+  visual Kenyon cell about 2 mV against a 7 mV threshold, so the mushroom
+  body cannot see the game at Shiu gains. Written up in
+  `docs/research/learning-2026-09-14.md`.
+
+## [2026-09-14] - Learning infrastructure: batched brain, PPO readout, mushroom-body plasticity
+
+- `brain_cuda.py` now batches: `batch=B` runs B flies over one connectivity
+  allocation with per-fly state, Poisson rates and delay ring; fly 0 of a
+  batch is bit-identical to the unbatched run (new section [D] of
+  `compare_backends.py`); `reset_rows()` restarts individual flies;
+  `set_edge_weights()` writes into the shared weights in place between graph
+  replays. Three flies cost 4.2 ms per fly-tick, less than one alone.
+- `rl_env.FlySquad`: B game-and-cockpit loops through one batched brain,
+  observations as spike counts pooled by cell type over the descending,
+  visual-projection and visual-centrifugal neurons (907 features), or the
+  photoreceptor drives directly (the no-brain ceiling); `PilotLoop.sense()`
+  splits sensing from the brain step.
+- `scripts/train_readout.py`: PPO on a small actor-critic over those
+  features, with `--brain connectome|rewired|silenced` and `--features
+  brain|retina`; `scripts/play_readout.py` plays a trained head with a
+  TRAINED READOUT footer. Runs launched: connectome, rewired and retina,
+  eight flies each, 400 updates.
+- `plasticity.py` (M7): dopamine-gated three-factor rule on the 62,261
+  measured KC to MBON edges, teaching pulses into the real PAM (kill) and
+  PPL1 (hit) populations through new extra Poisson sites on
+  `ConnectomeBrain`, presynaptic eligibility, centred dopamine, bounded
+  weights, `rule=lr0` and `edge_set=shuffled` controls;
+  `scripts/train_plasticity.py` runs the reflex pilot while the mushroom body
+  learns. `scripts/audit_mb_route.py` showed the substrate exists (visual
+  Kenyon cells two hops from the injection, MBONs one hop from the steer
+  pools). Unit check: a reward pulse drives PAM to 100 Hz and moves weights.
+- Finding: the mushroom body is barely in the visual loop at Shiu
+  parameters. A full-field flash activates about 5 of 5,177 Kenyon cells and
+  no MBON; a loom plus a moving bar activates one. Any learning effect is
+  bounded by that, and the runs are expected to report it.
+
 ## [2026-09-14] - Wall art laid out in view, and a sweetheart portrait
 
 - The starboard wall art was placed by guess and the beauty camera saw only

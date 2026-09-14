@@ -46,6 +46,14 @@ turns toward off-axis targets, and scores about one kill per 30 s episode;
 so does a degree-preserving random rewiring of the same brain. Details and
 the honest benchmark: `docs/research/cascade-probe-2026-09-14.md`.
 
+Two learning routes were then tried (`docs/research/learning-2026-09-14.md`):
+a PPO readout trained on the frozen brain's pooled spike counts learned to
+survive, from three deaths per minute to under one, but not to kill more than
+random play does, and the same head on a rewired brain learned survival just
+as well; dopamine-gated plasticity on the measured Kenyon-cell to MBON
+synapses changed 74 of 62,261 and nothing else, because at these gains the
+mushroom body cannot see the game. Both are labelled as such wherever shown.
+
 | Milestone | State | Note |
 |---|---|---|
 | M0 scaffold, smoke scripts | done | The smoke "tests" are scripts, not pytest; there is no `tests/` directory. |
@@ -56,7 +64,7 @@ the honest benchmark: `docs/research/cascade-probe-2026-09-14.md`.
 | M4 connectome pilots in wired mode, dashboard | partial | Idle scan now off by default and labelled when on; pooled readouts, saccadic gating and LI steering give event-driven play with real turns and kills; but the same-seed benchmark cannot yet separate the measured wiring from a rewired control; no eyes panel; mp4 compositor rather than a live view. |
 | M5 cockpit art pass | partial | Neon, lighting, set dressing and decals done; the screen is a flat box showing the raw frame; the single damage lamp sits about 35° above the eye cameras' axis, so the retina never sees it. |
 | M6 embodied mode, contact-driven controls | not started | No `mj_step`, actuators or contact reads; no `--pilot` flag exists. |
-| M7 learning and showcase video | not started | Only the `signals` hook is plumbed; both brains ignore it. |
+| M7 learning and showcase video | partial | Batched brain, PPO readout trainer, mushroom-body plasticity with LR-zero and shuffled controls all exist. Readouts learn survival, not kills; plasticity is bounded by a calyx that cannot see. No showcase cut. |
 
 Doc-versus-code gaps are listed in `docs/architecture.md` under "Status audit".
 The important ones: only FlyWire v783 is loaded, and pIP10 does not exist in
@@ -81,8 +89,10 @@ the female brain, so oviDN is read out under that name.
    right targets, a gain-matched rewired control, and more seeds. Then a live
    viewer with an eyes panel, and the eye-render settings fix.
 5. MaleCNS v1.0 loader, which also gives a real pIP10 and the VNC for M6.
-6. Then M6 and M7, which are fresh work; any dopamine rule needs an LR=0
-   control and a shuffled-pathway control pre-registered before the first run.
+6. Learning, continued: three to five training seeds per condition, a
+   kill-shaped reward and longer training to test whether the connectome
+   head's kept kill rate is real; a deliberate, labelled calyx-gain
+   experiment if the mushroom body is ever to learn. Then M6.
 
 ## Architecture
 

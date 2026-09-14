@@ -13,7 +13,15 @@ Per 0.1 ms step, four launches on the current stream:
 
 Everything is static-shape, so a whole tick (667 steps) is captured once as a
 CUDA graph and replayed; only the per-neuron spike counts come back to the
-host. Each ring row holds n entries, so it cannot overflow. Randomness is Philox (seed, step * n + neuron) — stateless, so reset()
+host. Each ring row holds n entries, so it cannot overflow.
+
+Batching: `batch=B` runs B independent flies over ONE connectivity
+allocation. State is (B, n), the delay ring (R, B, n), Poisson rates (B, n)
+so each fly sees its own screen; the kernels take the fly index as the
+second grid axis and the RNG offset folds it in so fly 0 of a batch is
+bit-identical to an unbatched run. `reset_rows()` restarts individual flies
+(episode ends) without touching the others. `set_edge_weights()` writes into
+the shared weights in place, between graph replays, for plasticity. Randomness is Philox (seed, step * n + neuron) — stateless, so reset()
 restores the same stream as the reference, though not the same numbers as
 NumPy's generator.
 
@@ -46,9 +54,10 @@ MAX_GRAPH_STEPS = 2500            # larger runs are chunked into several replays
 
 
 @triton.jit
-def _k_zero_slot(ring_cnt_ptr, ctr_ptr, R: tl.constexpr):
+def _k_zero_slot(ring_cnt_ptr, ctr_ptr, R: tl.constexpr, B: tl.constexpr):
+    fly = tl.program_id(0)
     c = tl.load(ctr_ptr)
-    tl.store(ring_cnt_ptr + (c % R), 0)
+    tl.store(ring_cnt_ptr + (c % R) * B + fly, 0)
 
 
 @triton.jit
@@ -57,18 +66,20 @@ def _k_neuron(v_ptr, g_ptr, refr_ptr, p_ptr, act_ptr, counts_ptr,
               n, seed, decay_m, decay_s, b_coef,
               V_REST_C: tl.constexpr, V_RESET_C: tl.constexpr,
               V_TH_C: tl.constexpr, REFR: tl.constexpr, KICK: tl.constexpr,
-              R: tl.constexpr, BLOCK: tl.constexpr):
+              R: tl.constexpr, B: tl.constexpr, BLOCK: tl.constexpr):
     pid = tl.program_id(0)
+    fly = tl.program_id(1)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     mask = offs < n
+    row = fly.to(tl.int64) * n
     c = tl.load(ctr_ptr)
     slot = c % R
 
-    v = tl.load(v_ptr + offs, mask=mask, other=V_REST_C)
-    g = tl.load(g_ptr + offs, mask=mask, other=0.0)
-    refr = tl.load(refr_ptr + offs, mask=mask, other=0)
-    act = tl.load(act_ptr + offs, mask=mask, other=0)
-    p = tl.load(p_ptr + offs, mask=mask, other=0.0)
+    v = tl.load(v_ptr + row + offs, mask=mask, other=V_REST_C)
+    g = tl.load(g_ptr + row + offs, mask=mask, other=0.0)
+    refr = tl.load(refr_ptr + row + offs, mask=mask, other=0)
+    act = tl.load(act_ptr + row + offs, mask=mask, other=0)
+    p = tl.load(p_ptr + row + offs, mask=mask, other=0.0)
 
     frozen = refr > 0
     b = b_coef * g
@@ -82,33 +93,39 @@ def _k_neuron(v_ptr, g_ptr, refr_ptr, p_ptr, act_ptr, counts_ptr,
     g = tl.where(spk, 0.0, g)
     refr = tl.where(spk, tl.where(act != 0, 0, REFR), refr)
 
-    cnt = tl.load(counts_ptr + offs, mask=mask, other=0)
-    tl.store(counts_ptr + offs, cnt + spk.to(tl.int32), mask=mask)
-    pos = tl.atomic_add(ring_cnt_ptr + slot + tl.zeros([BLOCK], tl.int32),
+    cnt = tl.load(counts_ptr + row + offs, mask=mask, other=0)
+    tl.store(counts_ptr + row + offs, cnt + spk.to(tl.int32), mask=mask)
+    pos = tl.atomic_add(ring_cnt_ptr + slot * B + fly + tl.zeros([BLOCK], tl.int32),
                         1, mask=spk)
-    tl.store(ring_list_ptr + slot * n + pos, offs, mask=spk)  # pos < n always
+    tl.store(ring_list_ptr + (slot * B + fly).to(tl.int64) * n + pos, offs,
+             mask=spk)  # pos < n always
 
-    u = tl.rand(seed, c.to(tl.int64) * n + offs.to(tl.int64))
+    # fly 0 of any batch draws the same stream as an unbatched run
+    u = tl.rand(seed, fly.to(tl.int64) * (1 << 50) + c.to(tl.int64) * n
+                + offs.to(tl.int64))
     hit = (p > 0.0) & (u < p)
     v = tl.where(hit, v + KICK, v)
 
     refr = tl.where(frozen, refr - 1, refr)
-    tl.store(v_ptr + offs, v, mask=mask)
-    tl.store(g_ptr + offs, g, mask=mask)
-    tl.store(refr_ptr + offs, refr, mask=mask)
+    tl.store(v_ptr + row + offs, v, mask=mask)
+    tl.store(g_ptr + row + offs, g, mask=mask)
+    tl.store(refr_ptr + row + offs, refr, mask=mask)
 
 
 @triton.jit
 def _k_deliver(g_ptr, indptr_ptr, indices_ptr, data_ptr,
                ring_list_ptr, ring_cnt_ptr, ctr_ptr, n,
-               R: tl.constexpr, D: tl.constexpr, PROGRAMS: tl.constexpr,
-               BLOCK: tl.constexpr):
+               R: tl.constexpr, D: tl.constexpr, B: tl.constexpr,
+               PROGRAMS: tl.constexpr, BLOCK: tl.constexpr):
     pid = tl.program_id(0)
+    fly = tl.program_id(1)
     c = tl.load(ctr_ptr)
     slot = (c + (R - D)) % R
-    cnt = tl.load(ring_cnt_ptr + slot)
+    cnt = tl.load(ring_cnt_ptr + slot * B + fly)
+    list_base = (slot * B + fly).to(tl.int64) * n
+    g_base = fly.to(tl.int64) * n
     for e in range(pid, cnt, PROGRAMS):      # grid-stride over the spike list
-        col = tl.load(ring_list_ptr + slot * n + e)
+        col = tl.load(ring_list_ptr + list_base + e)
         start = tl.load(indptr_ptr + col)
         end = tl.load(indptr_ptr + col + 1)
         for off in range(start, end, BLOCK):
@@ -116,7 +133,7 @@ def _k_deliver(g_ptr, indptr_ptr, indices_ptr, data_ptr,
             m = idx < end
             rows = tl.load(indices_ptr + idx, mask=m, other=0)
             vals = tl.load(data_ptr + idx, mask=m, other=0.0)
-            tl.atomic_add(g_ptr + rows, vals, mask=m)
+            tl.atomic_add(g_ptr + g_base + rows, vals, mask=m)
 
 
 class ShiuBrainCUDA(ShiuBrain):
@@ -127,9 +144,12 @@ class ShiuBrainCUDA(ShiuBrain):
                  device: str = "cuda", use_graph: bool = True,
                  ablate: str = "none", ablate_seed: int = 0,
                  sensory_input: str = "free", signs: str = "predicted",
-                 aminergic: str = "excitatory"):
+                 aminergic: str = "excitatory", batch: int = 1):
         if not torch.cuda.is_available():
             raise RuntimeError("ShiuBrainCUDA: no CUDA device visible to torch")
+        if batch < 1:
+            raise ValueError("batch must be >= 1")
+        self.B = batch
         self._device = torch.device(device)
         self._use_graph = use_graph
         self._graphs: dict[int, torch.cuda.CUDAGraph] = {}
@@ -142,15 +162,15 @@ class ShiuBrainCUDA(ShiuBrain):
         self._indptr = torch.from_numpy(W.indptr.astype(np.int32)).to(dev)
         self._indices = torch.from_numpy(W.indices.astype(np.int32)).to(dev)
         self._data = torch.from_numpy(W.data.astype(np.float32)).to(dev)
-        n = self.n
-        self._v = torch.empty(n, dtype=torch.float32, device=dev)
-        self._g = torch.empty(n, dtype=torch.float32, device=dev)
-        self._refr = torch.empty(n, dtype=torch.int32, device=dev)
-        self._p = torch.zeros(n, dtype=torch.float32, device=dev)
-        self._act = torch.zeros(n, dtype=torch.int32, device=dev)
-        self._counts = torch.zeros(n, dtype=torch.int32, device=dev)
-        self._ring_list = torch.zeros((RING, n), dtype=torch.int32, device=dev)
-        self._ring_cnt = torch.zeros(RING, dtype=torch.int32, device=dev)
+        n, B = self.n, self.B
+        self._v = torch.empty((B, n), dtype=torch.float32, device=dev)
+        self._g = torch.empty((B, n), dtype=torch.float32, device=dev)
+        self._refr = torch.empty((B, n), dtype=torch.int32, device=dev)
+        self._p = torch.zeros((B, n), dtype=torch.float32, device=dev)
+        self._act = torch.zeros((B, n), dtype=torch.int32, device=dev)
+        self._counts = torch.zeros((B, n), dtype=torch.int32, device=dev)
+        self._ring_list = torch.zeros((RING, B, n), dtype=torch.int32, device=dev)
+        self._ring_cnt = torch.zeros((RING, B), dtype=torch.int32, device=dev)
         self._ctr = torch.zeros(1, dtype=torch.int64, device=dev)  # no wrap
         self._poi_idx_dev = torch.empty(0, dtype=torch.int64, device=dev)
         self._ready = True
@@ -159,11 +179,14 @@ class ShiuBrainCUDA(ShiuBrain):
     @property
     def backend(self) -> str:
         return f"cuda:{torch.cuda.get_device_name(self._device)}" + \
-            (" graph" if self._use_graph else " eager")
+            (" graph" if self._use_graph else " eager") + \
+            (f" x{self.B}" if self.B > 1 else "")
 
     # -- state -------------------------------------------------------------
 
     def reset(self) -> None:
+        """Full reset of every fly, the Poisson registration and the step
+        counter (the reference semantics)."""
         super().reset()
         if not self._ready:
             return
@@ -178,21 +201,45 @@ class ShiuBrainCUDA(ShiuBrain):
         self._poi_idx_dev = torch.empty(0, dtype=torch.int64,
                                         device=self._device)
 
+    def reset_rows(self, rows) -> None:
+        """Restart the given flies (membrane, synapses, refractory, delay
+        ring, counts) and leave the others and the Poisson registration
+        untouched; for per-fly episode ends."""
+        rows = torch.as_tensor(np.asarray(rows, dtype=np.int64), device=self._device)
+        self._v[rows] = V_REST
+        self._g[rows] = 0.0
+        self._refr[rows] = 0
+        self._counts[rows] = 0
+        self._ring_cnt[:, rows] = 0
+
     def set_poisson(self, rates: dict[int, float]) -> None:
+        """Same activation set and rates for every fly."""
         super().set_poisson(rates)
         self._p.zero_()
         self._act.zero_()
         self._poi_idx_dev = torch.from_numpy(self._poi_idx).to(self._device)
         if self._poi_idx.size:
-            self._p[self._poi_idx_dev] = torch.from_numpy(self._poi_p).to(
+            self._p[:, self._poi_idx_dev] = torch.from_numpy(self._poi_p).to(
                 self._device)
-            self._act[self._poi_idx_dev] = 1
+            self._act[:, self._poi_idx_dev] = 1
 
     def update_rates(self, rates_hz: np.ndarray) -> None:
-        super().update_rates(rates_hz)
+        """Per-frame rates for the current activation set: shape (n_poi,)
+        applies to every fly, (B, n_poi) gives each fly its own."""
+        rates = np.asarray(rates_hz, np.float32)
+        super().update_rates(rates[0] if rates.ndim == 2 else rates)
         if self._poi_idx.size:
-            self._p[self._poi_idx_dev] = torch.from_numpy(
-                np.ascontiguousarray(self._poi_p)).to(self._device)
+            p = torch.from_numpy(np.ascontiguousarray(rates * DT)).to(self._device)
+            self._p[:, self._poi_idx_dev] = p  # broadcasts (n,) or (B, n)
+
+    def set_edge_weights(self, positions, values) -> None:
+        """Write weights (mV, signed) into the shared connectivity in place,
+        by CSC data position (see ShiuBrain.csc_positions). Safe between
+        graph replays; affects every fly."""
+        pos = torch.as_tensor(np.asarray(positions, dtype=np.int64), device=self._device)
+        val = torch.as_tensor(np.asarray(values, dtype=np.float32), device=self._device)
+        self._data[pos] = val
+        self.W.data[np.asarray(positions, dtype=np.int64)] = np.asarray(values, np.float32)
 
     def silence(self, idx: np.ndarray) -> None:
         super().silence(idx)
@@ -201,20 +248,20 @@ class ShiuBrainCUDA(ShiuBrain):
     # -- dynamics ----------------------------------------------------------
 
     def _launch_step(self) -> None:
-        n = self.n
-        _k_zero_slot[(1,)](self._ring_cnt, self._ctr, R=RING)
-        _k_neuron[(triton.cdiv(n, NEURON_BLOCK),)](
+        n, B = self.n, self.B
+        _k_zero_slot[(B,)](self._ring_cnt, self._ctr, R=RING, B=B)
+        _k_neuron[(triton.cdiv(n, NEURON_BLOCK), B)](
             self._v, self._g, self._refr, self._p, self._act, self._counts,
             self._ring_list, self._ring_cnt, self._ctr,
             n, int(self._seed), float(self._decay_m), float(self._decay_s),
             float(self._b_coef),
             V_REST_C=V_REST, V_RESET_C=V_RESET, V_TH_C=V_TH,
-            REFR=REFR_STEPS, KICK=POISSON_KICK, R=RING, BLOCK=NEURON_BLOCK,
+            REFR=REFR_STEPS, KICK=POISSON_KICK, R=RING, B=B, BLOCK=NEURON_BLOCK,
             enable_fp_fusion=False)
-        _k_deliver[(DELIVER_PROGRAMS,)](
+        _k_deliver[(DELIVER_PROGRAMS, B)](
             self._g, self._indptr, self._indices, self._data,
             self._ring_list, self._ring_cnt, self._ctr, n,
-            R=RING, D=DELAY_STEPS, PROGRAMS=DELIVER_PROGRAMS,
+            R=RING, D=DELAY_STEPS, B=B, PROGRAMS=DELIVER_PROGRAMS,
             BLOCK=EDGE_BLOCK)
         self._ctr.add_(1)
 
@@ -272,8 +319,9 @@ class ShiuBrainCUDA(ShiuBrain):
                 self._launch_step()
 
     def run_counts(self, n_steps: int) -> np.ndarray:
-        """Advance n_steps x 0.1 ms on the GPU; return per-neuron spike
-        counts for that window as an int32 numpy array."""
+        """Advance n_steps x 0.1 ms on the GPU for every fly; return per-neuron
+        spike counts for that window as int32, shape (n,) for a single fly or
+        (B, n) for a batch."""
         with torch.cuda.device(self._device):
             self._counts.zero_()
             done = 0
@@ -282,21 +330,23 @@ class ShiuBrainCUDA(ShiuBrain):
                 self._run_steps(k)
                 done += k
             counts = self._counts.cpu().numpy()
-        return counts
+        return counts[0] if self.B == 1 else counts
 
     def step(self) -> np.ndarray:
         """Reference API: one step, returns sorted spiking indices (slow
-        path: host syncs per call). Prefer run_counts()."""
+        path: host syncs per call). Prefer run_counts(). Single fly only."""
+        if self.B != 1:
+            raise RuntimeError("step() is for batch=1; use run_counts()")
         with torch.cuda.device(self._device):
             slot = int(self._ctr.item()) % RING
             self._launch_step()
-            cnt = int(self._ring_cnt[slot].item())
-            spk = self._ring_list[slot, :cnt].cpu().numpy().astype(np.int64)
+            cnt = int(self._ring_cnt[slot, 0].item())
+            spk = self._ring_list[slot, 0, :cnt].cpu().numpy().astype(np.int64)
         return np.sort(spk)
 
     def run(self, duration_s: float, progress_every: int = 0) -> np.ndarray:
         steps = round(duration_s / DT)
-        counts = np.zeros(self.n, np.int64)
+        counts = np.zeros(self.n if self.B == 1 else (self.B, self.n), np.int64)
         chunk = progress_every if progress_every else steps
         done = 0
         while done < steps:

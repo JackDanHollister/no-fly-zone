@@ -133,7 +133,11 @@ def _pca2d(pos: np.ndarray) -> np.ndarray:
 
 class ConnectomeBrain:
     def __init__(self, retina, brain: ShiuBrain | None = None, seed: int = 0,
-                 injection: str = "v0", readout: str = "v0"):
+                 injection: str = "v0", readout: str = "v0",
+                 extra_sites: dict[str, np.ndarray] | None = None):
+        """extra_sites: name -> brain indices to add to the Poisson activation
+        set with their own rate slots (e.g. dopamine neurons as teaching
+        signals); set them per tick with set_extra_rate()."""
         self.brain = brain if brain is not None else ShiuBrain(seed=seed)
         self.injection = injection
         self.sites = INJECTION_MAPS[injection]
@@ -160,8 +164,15 @@ class ConnectomeBrain:
                                    slice(start, start + len(bidx)), omm, side))
                 chunks.append(bidx)
                 start += len(bidx)
+        self._extra: dict[str, slice] = {}
+        for name, idx in (extra_sites or {}).items():
+            idx = np.asarray(idx, dtype=np.int64)
+            self._extra[name] = slice(start, start + len(idx))
+            chunks.append(idx)
+            start += len(idx)
         self._pr_all = np.concatenate(chunks)
         self._rates = np.zeros(len(self._pr_all), np.float32)
+        self.n_visual = int(sum(sl.stop - sl.start for _, _, sl, _, _ in self._pops))
         self._prev_lum: dict[str, np.ndarray | None] = {"left": None,
                                                         "right": None}
 
@@ -202,6 +213,9 @@ class ConnectomeBrain:
 
     def _register(self) -> None:
         self.brain.set_poisson({int(i): 0.0 for i in self._pr_all})
+
+    def set_extra_rate(self, name: str, hz: float) -> None:
+        self._rates[self._extra[name]] = hz
 
     def reset(self) -> None:
         self.brain.reset()

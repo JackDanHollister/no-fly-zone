@@ -209,6 +209,24 @@ class ShiuBrain:
         order that set_poisson registered it."""
         self._poi_p = (np.asarray(rates_hz, np.float32) * DT)
 
+    def csc_positions(self, pre: np.ndarray, post: np.ndarray) -> np.ndarray:
+        """Positions in W.data of the edges (pre -> post), or -1 where no
+        such edge exists. W is CSC with columns = presynaptic cells."""
+        pre = np.asarray(pre, np.int64); post = np.asarray(post, np.int64)
+        indptr, indices = self.W.indptr, self.W.indices
+        out = np.full(pre.size, -1, np.int64)
+        for k, (c, r) in enumerate(zip(pre, post)):
+            lo, hi = indptr[c], indptr[c + 1]
+            rows = indices[lo:hi]
+            j = np.searchsorted(rows, r) if self.W.has_sorted_indices else None
+            if j is not None and j < rows.size and rows[j] == r:
+                out[k] = lo + j
+            elif j is None:
+                hit = np.flatnonzero(rows == r)
+                if hit.size:
+                    out[k] = lo + hit[0]
+        return out
+
     def silence(self, idx: np.ndarray) -> None:
         """Zero all OUTGOING weights of the given neurons (reference-model
         semantics: inputs still arrive, spikes have no effect)."""

@@ -60,8 +60,10 @@ class PilotLoop:
         self.timings[stage].append(time.perf_counter() - t0)
         return out
 
-    def step(self) -> dict:
-        action = self.controls.to_action()
+    def sense(self, action: int) -> dict:
+        """The sensory half of a tick: apply an action to the game, update
+        the lamp and CRT, render both eyes, sample the retinas. Returns the
+        photoreceptor drives and the game signals; no brain, no controls."""
         frame, reward, life_lost, episode_end = self._timed(
             "game", self.game.step, action)
         self.total_reward += reward
@@ -80,6 +82,17 @@ class PilotLoop:
             "right": self._timed("retina", self.retina_right.sample, eye_r),
         }
         drives = {side: self.retina.photoreceptors(s) for side, s in rgb.items()}
+        return {"eye_left": eye_l, "rgb": rgb, "drives": drives,
+                "reward": reward, "life_lost": life_lost,
+                "episode_end": episode_end}
+
+    def step(self) -> dict:
+        action = self.controls.to_action()
+        sensed = self.sense(action)
+        drives, reward, life_lost, episode_end = (
+            sensed["drives"], sensed["reward"], sensed["life_lost"],
+            sensed["episode_end"])
+        eye_l, rgb = sensed["eye_left"], sensed["rgb"]
 
         if episode_end:
             # the world jumped: temporal state must not bridge two episodes

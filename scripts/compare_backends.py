@@ -131,6 +131,32 @@ def main() -> None:
             per_tick = time.perf_counter() - t0
         print(f"    {name}: {per_tick * 1000:.1f} ms per tick "
               f"({(TICK_STEPS * DT) / per_tick:.2f}x real time)")
+    # D — batching: fly 0 of a batch is bit-identical to the single-fly run,
+    # the other flies differ only by their Poisson draws, per-fly reset works
+    print("\n[D] batch of 3 flies vs single fly, sugar drive, 500 steps")
+    single = make_brain("cuda", use_graph=not args.no_graph)
+    trio = make_brain("cuda", use_graph=not args.no_graph, batch=3)
+    for b in (single, trio):
+        b.reset()
+        b.set_poisson({int(i): 150.0 for i in sugar})
+    c1 = single.run_counts(500)
+    c3 = trio.run_counts(500)
+    same0 = np.array_equal(c1, c3[0])
+    print(f"    fly 0 identical to single: {same0}; totals per fly {c3.sum(axis=1).tolist()} vs single {c1.sum()}")
+    assert same0, "batched fly 0 diverged from the single-fly run"
+    assert not np.array_equal(c3[1], c3[0]), "flies 1 and 0 should differ (independent Poisson draws)"
+    trio.reset_rows([1])
+    c3b = trio.run_counts(200)
+    c1b = single.run_counts(200)
+    print(f"    after reset_rows([1]): fly 0 still tracks single ({np.array_equal(c1b, c3b[0])}), "
+          f"fly 1 restarted (spikes {c3b[1].sum()} vs fly 0 {c3b[0].sum()})")
+    assert np.array_equal(c1b, c3b[0])
+    t0 = time.perf_counter()
+    for _ in range(10):
+        trio.run_counts(TICK_STEPS)
+    per = (time.perf_counter() - t0) / 10
+    print(f"    3 flies: {per * 1000:.1f} ms per tick = {per * 1000 / 3:.1f} ms per fly-tick")
+
     print("\nPASS: CUDA backend matches the reference")
 
 
