@@ -77,6 +77,9 @@ _XML = f"""
     <texture name="poster2" type="2d" builtin="flat" rgb1="0.05 0.07 0.12"
              width="128" height="160"/>
     <material name="poster2_mat" texture="poster2" emission="0.45" specular="0"/>
+    <texture name="portrait" type="2d" builtin="flat" rgb1="0.18 0.12 0.08"
+             width="128" height="176"/>
+    <material name="portrait_mat" texture="portrait" emission="0.5" specular="0"/>
     <texture name="crate" type="2d" builtin="flat" rgb1="0.2 0.22 0.15"
              width="128" height="64"/>
     <material name="crate_mat" texture="crate" emission="0.35" specular="0"/>
@@ -150,15 +153,15 @@ _XML = f"""
           material="hull"/>
     <geom name="wall_r_neon" type="box" pos="0.367 0.02 0.30"
           size="0.003 0.34 0.005" material="neon_orange"/>
-    <geom name="aux_frame1" type="box" pos="0.368 0.18 0.10" size="0.004 0.042 0.032"
+    <geom name="aux_frame1" type="box" pos="0.368 0.18 0.045" size="0.004 0.042 0.032"
           material="rubber"/>
-    <geom name="aux_screen1" type="box" pos="0.366 0.18 0.10" size="0.004 0.034 0.024"
+    <geom name="aux_screen1" type="box" pos="0.366 0.18 0.045" size="0.004 0.034 0.024"
           rgba="0.12 0.35 0.22 1"/>
-    <geom name="aux_frame2" type="box" pos="0.368 0.05 0.10" size="0.004 0.042 0.032"
+    <geom name="aux_frame2" type="box" pos="0.368 0.05 0.045" size="0.004 0.042 0.032"
           material="rubber"/>
-    <geom name="aux_screen2" type="box" pos="0.366 0.05 0.10" size="0.004 0.034 0.024"
+    <geom name="aux_screen2" type="box" pos="0.366 0.05 0.045" size="0.004 0.034 0.024"
           rgba="0.40 0.30 0.10 1"/>
-    <geom name="nameplate" type="box" pos="0.366 0.115 0.20" size="0.004 0.095 0.024"
+    <geom name="nameplate" type="box" pos="0.366 0.17 0.235" size="0.004 0.095 0.024"
           material="plate_mat"/>
     <geom name="vent1" type="box" pos="0.366 -0.16 0.02" size="0.004 0.05 0.004"
           material="rubber"/>
@@ -236,13 +239,17 @@ _XML = f"""
     <geom name="dogtag2" type="box" pos="-0.162 0.148 -0.093" size="0.007 0.002 0.010"
           euler="0 0 12" material="metal"/>
 
-    <!-- wall art: kill tally + war posters -->
-    <geom name="tally_plate" type="box" pos="0.366 0.115 0.135" size="0.004 0.055 0.033"
-          material="tally_mat"/>
-    <geom name="poster_apoc" type="box" pos="0.366 -0.04 0.24" size="0.004 0.052 0.072"
+    <!-- wall art, laid out in the beauty camera's view (y 0..0.38, z 0..0.29):
+         top band: nameplate; middle band: sweetheart portrait, two war
+         posters; bottom band: kill tally and the two aux screens -->
+    <geom name="poster_sweetheart" type="box" pos="0.366 0.322 0.14" size="0.004 0.048 0.066"
+          material="portrait_mat"/>
+    <geom name="poster_apoc" type="box" pos="0.366 0.212 0.14" size="0.004 0.042 0.058"
           material="poster1_mat"/>
-    <geom name="poster_wings" type="box" pos="0.366 -0.215 0.21" size="0.004 0.047 0.060"
+    <geom name="poster_wings" type="box" pos="0.366 0.11 0.14" size="0.004 0.040 0.050"
           material="poster2_mat"/>
+    <geom name="tally_plate" type="box" pos="0.366 0.31 0.05" size="0.004 0.050 0.030"
+          material="tally_mat"/>
 
     <!-- controls, placed under the fly's front claws -->
     <body name="lever_left" pos="-{CLAW_X} {CLAW_Y} {CLAW_Z - 0.09}">
@@ -263,7 +270,7 @@ _XML = f"""
     </body>
 
     <body name="focus" pos="0 0.06 0.03"/>
-    <camera name="beauty" pos="-0.34 -0.32 0.24" mode="targetbody" target="focus"/>
+    <camera name="beauty" pos="-0.34 -0.32 0.24" mode="targetbody" target="focus" fovy="50"/>
     <camera name="shoulder" pos="0.16 -0.34 0.20" mode="targetbody" target="focus"/>
     <!-- retina cameras ride just ahead of the antennae on the fly's eye
          line (contact-lens cams): behind this point the fly's own head
@@ -362,6 +369,76 @@ def _paint_poster_wings(img, draw, w, h):
     _center_text(draw, w, 134, "MINISTRY OF WING SAFETY", _font(9), (150, 150, 140))
 
 
+# the one she is fighting for: a pixel portrait pinned by the posters
+_SWEETHEART = [
+    "........................",
+    "..........pPp...........",
+    ".........ppPpp..........",
+    "....k....pp.pp....k.....",
+    ".....k....kkk....k......",
+    "......k...k.k...k.......",
+    ".......kkkkkkkkk........",
+    "..k...krrrkkkrrrk...k...",
+    "...k.krrRrrkrrRrrk.k....",
+    "....krrrrrrkrrrrrrk.....",
+    "....krrrrrrkrrrrrrk.....",
+    "....krrrrrrkrrrrrrk.....",
+    ".....krrrrkkkrrrrk......",
+    "......kkkkkbkkkkk.......",
+    ".........kbbbk..........",
+    "..wwwwwwkbBBBbkwwwwww...",
+    ".wwWwwwwkbbbbbkwwwwWww..",
+    "wwwWwwwwkbBBBbkwwwwWwww.",
+    "wwwwWwwwkbbbbbkwwwWwwww.",
+    ".wwwwWwwkkbbbkkwwWwwww..",
+    "..wwwwWwkyyyyykwWwwww...",
+    "...wwwwwkbbbbbkwwwww....",
+    "....wwwwkyyyyykwwww.....",
+    ".....wwwkbbbbbkwww......",
+    "......wwkyyyyykww.......",
+    ".......wkbbbbbkw........",
+    "........kyyyyyk.........",
+    ".........kbbbk..........",
+    ".........kyyyk..........",
+    "..........kbk...........",
+    "...........k............",
+    "........................",
+]
+_SWEETHEART_PALETTE = {
+    "k": (22, 14, 12), "r": (205, 40, 55), "R": (255, 160, 170),
+    "b": (125, 80, 45), "B": (82, 50, 28), "y": (218, 172, 70),
+    "w": (205, 228, 242), "W": (150, 190, 222), "p": (238, 96, 160),
+    "P": (255, 176, 205),
+}
+_HEART = [".hh.hh.", "hhhhhhh", "hhhhhhh", ".hhhhh.", "..hhh..", "...h..."]
+
+
+def _blit_pixels(img, rows, palette, x0, y0, scale):
+    px = img.load()
+    for j, row in enumerate(rows):
+        for i, ch in enumerate(row):
+            colour = palette.get(ch)
+            if colour is None:
+                continue
+            for dy in range(scale):
+                for dx in range(scale):
+                    px[x0 + i * scale + dx, y0 + j * scale + dy] = colour
+
+
+def _paint_portrait(img, draw, w, h):
+    # sepia photo with a brass frame, pinned at the corners
+    for i in range(h):  # faded gradient
+        t = i / h
+        draw.line([0, i, w, i], fill=(int(70 - 18 * t), int(48 - 12 * t), int(30 - 8 * t)))
+    draw.rectangle([3, 3, w - 4, h - 4], outline=(190, 150, 70), width=3)
+    _blit_pixels(img, _SWEETHEART, _SWEETHEART_PALETTE, 16, 12, 4)
+    _blit_pixels(img, _HEART, {"h": (225, 50, 70)}, 12, 132, 2)
+    _blit_pixels(img, _HEART, {"h": (225, 50, 70)}, w - 12 - 14, 132, 2)
+    _center_text(draw, w, 148, "COME HOME SAFE", _font(11), (245, 220, 170))
+    for cx, cy in ((7, 7), (w - 8, 7), (7, h - 8), (w - 8, h - 8)):  # pins
+        draw.ellipse([cx - 2, cy - 2, cx + 2, cy + 2], fill=(220, 200, 120))
+
+
 def _paint_crate(img, draw, w, h):
     stencil = (25, 22, 15)
     _center_text(draw, w, 8, "SUGAR RATIONS", _font(15), stencil)
@@ -376,6 +453,7 @@ _DECALS = {
     "tally": (128, 96, (26, 26, 23), _paint_tally, True),
     "poster1": (128, 176, (26, 13, 8), _paint_poster_apoc, True),
     "poster2": (128, 160, (13, 18, 31), _paint_poster_wings, True),
+    "portrait": (128, 176, (46, 31, 20), _paint_portrait, True),
     "crate": (128, 64, (51, 56, 38), _paint_crate, False),  # faces -y
 }
 

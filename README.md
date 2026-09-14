@@ -5,9 +5,10 @@ licensed to drive.
 
 ![The connectome pilot turning toward a tank, firing, and backing off from the loom](docs/media/demo.gif)
 
-*Left: the fly seated at the CRT. Middle: Atari Battlezone. Right: 138,639
-neurons, spikes glowing. Bottom: the descending neurons it is read out
-from. Everything on the footer is a named, measured mapping.*
+*Left: the fly seated at the CRT, with the one she is fighting for pinned to
+the wall. Middle: Atari Battlezone. Right: 138,639 neurons, spikes glowing.
+Bottom: the descending neurons it is read out from. Everything on the footer
+is a named, measured mapping.*
 
 The complete Drosophila brain wiring diagram (FlyWire v783 today, 138,639
 neurons; MaleCNS planned) runs as a spiking simulation and is seated as the **pilot** inside a

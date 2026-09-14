@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-09-14] - Wall art laid out in view, and a sweetheart portrait
+
+- The starboard wall art was placed by guess and the beauty camera saw only
+  part of it: one war poster was half off the right edge, the other entirely
+  off-screen, and the nameplate and tally sat on top of each other. The wall
+  is now laid out in three bands inside the camera's view (nameplate; the
+  three posters; tally and aux screens), the beauty lens is 50 degrees
+  instead of 45, and nothing overlaps or clips.
+- New decal: a pixel-art portrait of a female fly, pinned as a sepia photo
+  with a brass frame, two hearts and "COME HOME SAFE", painted in code like
+  the other decals (`_SWEETHEART` pixel map in `cockpit.py`). The one she is
+  fighting for. Hero image and demo media refreshed.
+
 ## [2026-09-14] - Persistent olfactory state found and corrected; honest benchmark
 
 - Long runs settled into fixed pool rates regardless of the screen. Cutting
