@@ -56,7 +56,8 @@ def main() -> None:
                 loop.cockpit.render("beauty"), loop.game.frame, loop.controls,
                 state["dn"], loop.total_reward, i * loop.dt,
                 brain=view.render(brain.window_counts),
-                brain_label=f"138,639 neurons | {spiking:,} spiking"))
+                brain_label=f"138,639 neurons | {spiking:,} spiking",
+                footer="NO-FLY-ZONE  //  pilot: FlyWire connectome (female, v783)"))
         if (i + 1) % 15 == 0:
             dn_str = "  ".join(f"{k} {v:5.1f}" for k, v in state["dn"].items())
             cascade = "  ".join(

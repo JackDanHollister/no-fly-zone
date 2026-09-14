@@ -46,7 +46,8 @@ def _bar_h(draw, x, y, w, h, frac, color, label, text):
 
 def compose(beauty: np.ndarray, game: np.ndarray, controls, rates: dict,
             score: float, t: float, brain: np.ndarray | None = None,
-            brain_label: str = "") -> np.ndarray:
+            brain_label: str = "",
+            footer: str = "NO-FLY-ZONE") -> np.ndarray:
     n_panels = 3 if brain is not None else 2
     width = PANEL_W * n_panels
     canvas = Image.new("RGB", (width, PANEL_H + STRIP_H), BG)
@@ -99,7 +100,6 @@ def compose(beauty: np.ndarray, game: np.ndarray, controls, rates: dict,
     draw.text((x0 + 90, top + 70),
               f"throttle {controls.throttle:+.2f}", font=FONT, fill=FG)
     draw.text((x0 + 90, top + 88), f"t = {t:6.1f} s", font=FONT, fill=DIM)
-    draw.text((x0 + 90, top + 112),
-              "NO-FLY-ZONE  //  MaleCNS pilot: reflex stub", font=FONT, fill=DIM)
+    draw.text((x0 + 90, top + 112), footer, font=FONT, fill=DIM)
 
     return np.asarray(canvas)

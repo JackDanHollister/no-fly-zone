@@ -41,7 +41,8 @@ def main() -> None:
             beauty = loop.cockpit.render("beauty")
             writer.append_data(dashboard.compose(
                 beauty, loop.game.frame, loop.controls, state["dn"],
-                loop.total_reward, i * loop.dt))
+                loop.total_reward, i * loop.dt,
+                footer="NO-FLY-ZONE  //  pilot: reflex stub"))
         if (i + 1) % 200 == 0:
             print(f"step {i + 1}: reward so far {loop.total_reward}, "
                   f"steer {loop.controls.steer:+.2f}, "
