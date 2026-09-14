@@ -24,9 +24,12 @@ class HexRetina:
                 centers.append((np.sqrt(3.0) * (q + r / 2.0), 1.5 * r))
         centers = np.asarray(centers, dtype=np.float64)
         self.n_ommatidia = len(centers)
-        # normalized horizontal position of each ommatidium, -1 (left) .. +1
-        # (right) — the retinotopic axis motor readouts weight against
-        self.centers_x = (centers[:, 0] / np.abs(centers).max()).astype(np.float32)
+        # normalized ommatidium positions in [-1, 1]^2 (x: left..right,
+        # y: down..up) — the retinotopic frame used for motor readouts and
+        # for mapping onto real photoreceptor neurons
+        scale = np.abs(centers).max()
+        self.centers_xy = (centers / scale).astype(np.float32)
+        self.centers_x = self.centers_xy[:, 0]
 
         # scale lattice to the largest disc that fits the image, centred
         h, w = image_shape

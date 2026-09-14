@@ -114,6 +114,11 @@ class ShiuBrain:
         self._activated[:] = False
         self._activated[self._poi_idx] = True
 
+    def update_rates(self, rates_hz: np.ndarray) -> None:
+        """Fast per-frame rate update for the CURRENT activation set, in the
+        order that set_poisson registered it."""
+        self._poi_p = (np.asarray(rates_hz, np.float32) * DT)
+
     def silence(self, idx: np.ndarray) -> None:
         """Zero all OUTGOING weights of the given neurons (reference-model
         semantics: inputs still arrive, spikes have no effect)."""
@@ -124,12 +129,13 @@ class ShiuBrain:
     # -- dynamics ----------------------------------------------------------
 
     def _deliver(self, cols: np.ndarray) -> None:
-        indptr, indices, data = self.W.indptr, self.W.indices, self.W.data
-        rows = np.concatenate([indices[indptr[c]:indptr[c + 1]] for c in cols])
-        vals = np.concatenate([data[indptr[c]:indptr[c + 1]] for c in cols])
-        if rows.size:
-            self.g += np.bincount(rows, weights=vals,
-                                  minlength=self.n).astype(np.float32)
+        # sparse column-gather via C-level matvec: cost scales with the
+        # spiking columns' edges, not with total nnz
+        vec = sparse.csc_matrix(
+            (np.ones(cols.size, np.float32), cols,
+             np.array([0, cols.size])), shape=(self.n, 1))
+        out = (self.W @ vec).tocoo()
+        self.g[out.row] += out.data.astype(np.float32)
 
     def step(self) -> np.ndarray:
         """Advance one 0.1 ms step; returns indices of neurons that spiked."""

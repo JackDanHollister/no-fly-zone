@@ -11,20 +11,25 @@ from . import dn
 
 
 class CockpitControls:
-    def __init__(self, action_meanings: list[str]):
+    def __init__(self, action_meanings: list[str], idle_throttle: float = 0.0):
+        """idle_throttle: baseline forward drive (central-pattern stand-in) so
+        a quiet brain still generates optic flow for its own visual system."""
         self._action_id = {name: i for i, name in enumerate(action_meanings)}
+        self.idle_throttle = idle_throttle
+        self.idle_steer = 0.0  # scanning turn: rotation makes optic flow
         self.steer = 0.0     # -1 (left) .. +1 (right)
         self.throttle = 0.0  # -1 (reverse) .. +1 (forward)
         self.fire = False
 
     def update(self, rates: dict[str, float], dt: float) -> None:
         drive = dn.normalize(rates)
-        target_steer = np.clip(2.0 * (drive["DNa02_R"] - drive["DNa02_L"]),
-                               -1.0, 1.0)
+        target_steer = np.clip(
+            2.0 * (drive["DNa02_R"] - drive["DNa02_L"]) + self.idle_steer,
+            -1.0, 1.0)
         if drive["DNp01"] > 0.5:  # giant-fiber startle: back off
             target_throttle = -1.0
         else:
-            target_throttle = drive["DNg100"]
+            target_throttle = max(drive["DNg100"], self.idle_throttle)
         # low-pass so levers move like levers, not switches
         alpha = 1.0 - np.exp(-dt / 0.12)
         self.steer += alpha * (target_steer - self.steer)

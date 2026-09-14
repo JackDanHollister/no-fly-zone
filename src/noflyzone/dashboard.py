@@ -45,17 +45,25 @@ def _bar_h(draw, x, y, w, h, frac, color, label, text):
 
 
 def compose(beauty: np.ndarray, game: np.ndarray, controls, rates: dict,
-            score: float, t: float) -> np.ndarray:
-    canvas = Image.new("RGB", (W, H), BG)
+            score: float, t: float, brain: np.ndarray | None = None,
+            brain_label: str = "") -> np.ndarray:
+    n_panels = 3 if brain is not None else 2
+    width = PANEL_W * n_panels
+    canvas = Image.new("RGB", (width, PANEL_H + STRIP_H), BG)
     canvas.paste(_fit(beauty, PANEL_W, PANEL_H, False), (0, 0))
     canvas.paste(_fit(game, PANEL_W, PANEL_H, True), (PANEL_W, 0))
     draw = ImageDraw.Draw(canvas)
-    draw.line([PANEL_W, 0, PANEL_W, PANEL_H], fill=BG, width=3)
     draw.text((10, 8), "PILOT", font=FONT, fill=DIM)
     draw.text((PANEL_W + 10, 8), "BATTLEZONE", font=FONT, fill=DIM)
+    if brain is not None:
+        canvas.paste(_fit(brain, PANEL_W, PANEL_H, False), (2 * PANEL_W, 0))
+        draw.text((2 * PANEL_W + 10, 8), "CONNECTOME", font=FONT, fill=DIM)
+        if brain_label:
+            draw.text((2 * PANEL_W + 10, PANEL_H - 22), brain_label,
+                      font=FONT, fill=FG)
 
     top = PANEL_H
-    draw.rectangle([0, top, W, H], fill=PANEL_BG)
+    draw.rectangle([0, top, width, PANEL_H + STRIP_H], fill=PANEL_BG)
 
     # treads: two vertical levers, centre line = neutral
     draw.text((20, top + 10), "TREADS", font=FONT, fill=DIM)
