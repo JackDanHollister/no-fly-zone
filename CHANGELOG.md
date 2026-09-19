@@ -28,9 +28,13 @@
   WEIGHTS; `--learn vis_dn` runs the rule live while the fly plays with
   the drift on the footer; `--video-name`.
 - `train_readout.py --life-penalty` (kill-shaped reward), `eval_readout.py
-  --out/--skip-baselines`, `scripts/summarize_learning.py`. The three-seed
-  PPO sweep with life penalty 0.1 is running; its result is recorded when
-  it finishes.
+  --out/--skip-baselines`, `scripts/summarize_learning.py`. Three-seed PPO
+  sweep with life penalty 0.1, 410k ticks per run: the brain-fed heads
+  raise their kill rate in training (five of six seeds) and the retina
+  heads lower theirs, but on four unseen games the connectome, rewired
+  and retina heads are indistinguishable (1.5, 1.4, 1.3 kills ± 0.2-0.3
+  per 900 ticks) and none beats random play (2.25). The 2026-09-14 hint
+  that the connectome head alone kept its kill rate does not replicate.
 - Tests: the edge sets, the controls' size and disjointness, the bounds
   and sign of the relative rule (17 pass). Fixed on the way: the `dn_in`
   shuffled control had an empty pool.

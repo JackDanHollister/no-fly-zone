@@ -60,7 +60,9 @@ controls drive the game. Fly → cockpit → tank → robot war.
   Levers are a kinematic puppet.
 - **Not claimed:** that the fly learns (the two learning experiments and
   their controls are in `docs/research/learning-2026-09-14.md`), that the
-  wiring beats a random graph on kills (it does not), that the
+  wiring beats a random graph on kills (it does not), that a readout trained on it plays better than one
+  trained on a rewired brain or on the retina (it does not, three seeds,
+  `docs/research/learning-2026-09-19.md`), that the
   within-hemisphere circuit matters beyond keeping the two sides apart
   (`docs/research/wiring-controls-2026-09-18.md`), that the mushroom body
   is in the loop, or anything about consciousness. Every video is closed-loop unless
@@ -157,7 +159,13 @@ inputs, and the fly dies just as much. With the readout's calibration
 fixed, the rule is a gain perturbation of a tuned reflex and has no
 helpful direction. `run_m3.py --learned-weights` plays any of these
 brains and `--learn vis_dn` runs the rule live, both labelled on the
-footer.
+footer. The PPO readout was re-run the same day with three seeds per
+condition and a kill-shaped reward (a kill worth ten lives): on four
+unseen games the heads on the measured connectome, the rewired brain and
+the bare retina are indistinguishable (1.5, 1.4, 1.3 kills per 900 ticks,
+errors 0.2-0.3) and none beats random play. The measured wiring is not a
+better feature map for this policy than a random graph with the same
+degrees, and the earlier one-seed hint that it was does not replicate.
 
 | Milestone | State | Note |
 |---|---|---|
@@ -213,9 +221,9 @@ the female brain, so oviDN is read out under that name.
    readout pools, a male pilot run, and the VNC for M6.
 6. Learning, continued. Done 2026-09-19: the three-factor rule on the
    descending neurons' inputs, with controls and a frozen test (it learns,
-   and what it learns is harmful; see Status). Running: three training
-   seeds per condition with the kill-shaped reward for the PPO readout.
-   Still open: a rule that moves the readout's calibration with the
+   and what it learns is harmful; see Status), and the PPO readout at
+   three seeds per condition with the kill-shaped reward (no condition
+   beats another or random play). Still open: a rule that moves the readout's calibration with the
    synapses, or learns both (the only route left for in-brain learning
    here); a deliberate, labelled calyx-gain experiment if the mushroom body
    is ever to learn. Then M6.
