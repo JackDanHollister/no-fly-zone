@@ -109,9 +109,13 @@ class MBPlasticity:
             pre_ok, post_ok = np.isin(sc[pre], VISUAL_CLASSES), sc[post] == "descending"
         m = pre_ok & post_ok
         if shuffled:
-            # equal number of edges touching neither the set's sources nor its targets
+            # equal number of edges touching neither the set's sources nor its
+            # targets; when the sources are every cell (dn_in) only the targets
+            # are excluded, so the control is "the rule on synapses that do not
+            # end on a descending neuron"
             rng = np.random.default_rng(seed)
-            pool = np.flatnonzero(~pre_ok & ~post_ok)
+            excl = post_ok if pre_ok.all() else (pre_ok | post_ok)
+            pool = np.flatnonzero(~excl)
             n_set = int(m.sum())
             m = np.zeros_like(m); m[rng.choice(pool, size=n_set, replace=False)] = True
         pairs = pairs[m]

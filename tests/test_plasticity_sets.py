@@ -26,6 +26,9 @@ def test_descending_edge_sets_and_controls(tmp_path):
     assert ctrl.n_edges == vis.n_edges
     assert not np.any(sc[ctrl.post] == "descending")
     assert not np.any(np.isin(sc[ctrl.pre], VISUAL_CLASSES))
+    dn_ctrl = MBPlasticity(brain, dt=1 / 15, edge_set="dn_in_shuffled", seed=3)
+    assert dn_ctrl.n_edges == dn.n_edges
+    assert not np.any(sc[dn_ctrl.post] == "descending")
     # the mushroom-body rule keeps its 2026-09-14 defaults
     mb = MBPlasticity(brain, dt=1 / 15, edge_set="kc_mbon")
     assert mb.eligibility == "presynaptic" and mb.scale == "absolute" and not np.isfinite(mb.elig_cap)
