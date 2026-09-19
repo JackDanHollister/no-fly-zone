@@ -44,6 +44,8 @@ def main() -> None:
     ap.add_argument("--elig-cap", type=float, default=None,
                     help="default: none for absolute scale, 50 for relative")
     ap.add_argument("--readout", default="pool4")
+    ap.add_argument("--teaching", choices=["both", "kills", "hits"], default="both",
+                    help="which game events teach: kills pulse PAM, hits pulse PPL1, or only one of them")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--episodes", type=int, default=20, help="per fly")
     ap.add_argument("--episode-ticks", type=int, default=900)
@@ -93,6 +95,10 @@ def main() -> None:
         squad.set_teaching("ppl1", rates["ppl1"])
         obs, rew, done, infos = squad.step(actions)
         kills = np.array([i["kill"] for i in infos]); hits = np.array([i["life_lost"] for i in infos])
+        if args.teaching == "kills":
+            hits = np.zeros_like(hits)
+        elif args.teaching == "hits":
+            kills = np.zeros_like(kills)
         d = plast.step(squad.last_counts, kills, hits); diag_acc.append(d)
         for i, c in enumerate(controls):
             c.update(squad.last_dn[i], squad.dt)

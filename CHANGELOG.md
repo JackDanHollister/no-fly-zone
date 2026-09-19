@@ -1,5 +1,40 @@
 # Changelog
 
+## [2026-09-19] - Learning, second pass: the rule reaches the game and learns the wrong thing
+
+- `plasticity.py` edge sets `dn_in` (every input to a descending neuron,
+  332,213) and `vis_dn` (visual projection/centrifugal inputs, 24,110),
+  each with a size-matched `_shuffled` control on edges that do not end
+  on a descending neuron. Hebbian, bounded (cap 50) eligibility and a
+  change relative to the measured weight: reward-modulated Hebbian
+  learning, the fly's PAM minus PPL1 as the dopamine term, applied as a
+  global modulator and labelled ENGINEERED. `load_weights()`,
+  `train_plasticity.py --init-weights` for a frozen test of a learned
+  brain, `--edge-seed`, `--teaching both|kills|hits`, `--readout`.
+- Result (`docs/research/learning-2026-09-19.md`): the rule now moves 40%
+  of the synapses it is given, and every brain it produces dies more on
+  unseen games (2.5-2.8 lives per episode against 1.9, six of six across
+  mixed, hits-only and kills-only teaching) while the shuffled controls
+  do not. Hits depress the loom pathway (LC4/LPLC4 onto the giant fibre
+  and the loom pool to a quarter of measured), because a hit follows a
+  loom and the rule punishes the response as if it were the cause; kills
+  potentiate the steer and escape inputs and the fly dies just as much.
+  Reading: the reflex controller is calibrated to the measured descending
+  rates, and a rule that rescales them has no helpful direction with the
+  readout fixed. `scripts/audit_learned_weights.py` gives the per-type
+  tables (`out/audit_learned_weights_2026-09-19.txt`).
+- `run_m3.py --learned-weights` installs a learned brain (checked
+  against the saved measured weights) and labels the footer LEARNED
+  WEIGHTS; `--learn vis_dn` runs the rule live while the fly plays with
+  the drift on the footer; `--video-name`.
+- `train_readout.py --life-penalty` (kill-shaped reward), `eval_readout.py
+  --out/--skip-baselines`, `scripts/summarize_learning.py`. The three-seed
+  PPO sweep with life penalty 0.1 is running; its result is recorded when
+  it finishes.
+- Tests: the edge sets, the controls' size and disjointness, the bounds
+  and sign of the relative rule (17 pass). Fixed on the way: the `dn_in`
+  shuffled control had an empty pool.
+
 ## [2026-09-18] - Night session: the male in the game, and direction through the wiring
 
 - `READOUT_MAPS["pool_male"]` from the male's own screen at weights x0.6
