@@ -144,6 +144,21 @@ as well; dopamine-gated plasticity on the measured Kenyon-cell to MBON
 synapses changed 74 of 62,261 and nothing else, because at these gains the
 mushroom body cannot see the game. Both are labelled as such wherever shown.
 
+On 2026-09-19 the same three-factor rule was moved to where the game does
+reach, the synapses onto the descending neurons (visual inputs, 24,110, or
+every input, 332,213; `docs/research/learning-2026-09-19.md`). It now
+moves 40% of what it is given, and every brain it produces dies more on
+unseen games than the measured one (2.5-2.8 lives per episode against
+1.9, six of six across mixed, hits-only and kills-only teaching), while
+size-matched shuffled controls do not. Hits depress the loom pathway to a
+quarter of its measured weight, because a hit follows a loom and the rule
+punishes the response as the cause; kills potentiate the steer and escape
+inputs, and the fly dies just as much. With the readout's calibration
+fixed, the rule is a gain perturbation of a tuned reflex and has no
+helpful direction. `run_m3.py --learned-weights` plays any of these
+brains and `--learn vis_dn` runs the rule live, both labelled on the
+footer.
+
 | Milestone | State | Note |
 |---|---|---|
 | M0 scaffold, smoke scripts | done | The smoke "tests" are scripts, not pytest; there is no `tests/` directory. |
@@ -154,7 +169,7 @@ mushroom body cannot see the game. Both are labelled as such wherever shown.
 | M4 connectome pilots in wired mode, dashboard | partial | Idle scan now off by default and labelled when on; pooled readouts, saccadic gating and LI steering give event-driven play with real turns and kills; the wiring is shown to carry target side to the descending neurons where a whole-brain rewiring does not, but a within-hemisphere rewiring also keeps it; no eyes panel; mp4 compositor rather than a live view. |
 | M5 cockpit art pass | partial | Neon, lighting, set dressing and decals done; the screen is a flat box showing the raw frame; the single damage lamp sits about 35° above the eye cameras' axis, so the retina never sees it. |
 | M6 embodied mode, contact-driven controls | not started | No `mj_step`, actuators or contact reads; no `--pilot` flag exists. |
-| M7 learning and showcase video | partial | Batched brain, PPO readout trainer, mushroom-body plasticity with LR-zero and shuffled controls all exist. Readouts learn survival, not kills; plasticity is bounded by a calyx that cannot see. No showcase cut. |
+| M7 learning and showcase video | partial | Batched brain, PPO readout trainer, three-factor plasticity on the mushroom body and on the descending neurons' inputs, with LR-zero and shuffled controls and a frozen test on unseen games. Readouts learn survival, not kills; the mushroom body cannot see the game; the descending-input rule changes behaviour reproducibly and for the worse. Learned brains and live learning play in `run_m3.py`, labelled. No showcase cut. |
 
 Doc-versus-code gaps are listed in `docs/architecture.md` under "Status audit".
 The important ones: only FlyWire v783 is loaded, and pIP10 does not exist in
@@ -196,10 +211,14 @@ the female brain, so oviDN is read out under that name.
    Still open: the male's own hex-column retinotopy in place of the PCA
    heuristic (the male responds asymmetrically to it), male-screened
    readout pools, a male pilot run, and the VNC for M6.
-6. Learning, continued: three to five training seeds per condition, a
-   kill-shaped reward and longer training to test whether the connectome
-   head's kept kill rate is real; a deliberate, labelled calyx-gain
-   experiment if the mushroom body is ever to learn. Then M6.
+6. Learning, continued. Done 2026-09-19: the three-factor rule on the
+   descending neurons' inputs, with controls and a frozen test (it learns,
+   and what it learns is harmful; see Status). Running: three training
+   seeds per condition with the kill-shaped reward for the PPO readout.
+   Still open: a rule that moves the readout's calibration with the
+   synapses, or learns both (the only route left for in-brain learning
+   here); a deliberate, labelled calyx-gain experiment if the mushroom body
+   is ever to learn. Then M6.
 
 ## Architecture
 
