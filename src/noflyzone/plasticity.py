@@ -27,6 +27,22 @@ Controls, pre-registered: rule="lr0" computes everything and applies nothing;
 edge_set="shuffled" applies the same rule to an equal number of random
 non-mushroom-body edges. Every fly in a batch shares the weights, so a batch
 is one fly living several lives at once.
+
+Added 2026-09-19, after the mushroom body was measured to be out of the
+visual loop: the same three-factor rule on the synapses the game does
+reach. edge_set="dn_in" is every measured edge onto a descending neuron
+(332,213), "vis_dn" the subset whose presynaptic cell is a visual projection
+or visual centrifugal neuron (24,110); each has a "<set>_shuffled" control of
+equal size drawn from edges that touch neither end. For these sets the
+eligibility is Hebbian (presynaptic trace times postsynaptic trace, so an
+input is credited only when its descending neuron fired) and the change is
+relative to the measured weight (scale="relative"), which is
+reward-modulated Hebbian learning, the spiking form of a policy gradient
+(Fremaux & Gerstner 2016). The dopamine term is still the fly's own PAM
+minus PPL1 population rate, driven by the game's teaching pulses; those
+neurons do not contact the descending neurons' inputs in the wiring, so the
+signal is applied as a global modulator and labelled ENGINEERED wherever it
+is shown.
 """
 
 from __future__ import annotations
@@ -37,7 +53,10 @@ import pandas as pd
 from .brain_lif import SHIU, annotations
 
 RULES = ("on", "lr0")
-EDGE_SETS = ("kc_mbon", "shuffled")
+BASE_SETS = ("kc_mbon", "dn_in", "vis_dn")
+EDGE_SETS = ("kc_mbon", "shuffled", "dn_in", "vis_dn",
+             "kc_mbon_shuffled", "dn_in_shuffled", "vis_dn_shuffled")
+VISUAL_CLASSES = ("visual_projection", "visual_centrifugal")
 
 
 class MBPlasticity:
@@ -45,11 +64,29 @@ class MBPlasticity:
                  bounds: tuple[float, float] = (0.1, 2.0), teaching_hz: float = 100.0,
                  pulse_ticks: int = 6, da_tau_s: float = 20.0, rule: str = "on",
                  edge_set: str = "kc_mbon", seed: int = 0,
-                 eligibility: str = "presynaptic"):
+                 eligibility: str | None = None, scale: str | None = None,
+                 elig_cap: float | None = None):
         assert rule in RULES and edge_set in EDGE_SETS
-        assert eligibility in ("presynaptic", "hebbian")
+        if edge_set == "shuffled":
+            edge_set = "kc_mbon_shuffled"
+        base = edge_set.replace("_shuffled", "")
+        shuffled = edge_set.endswith("_shuffled")
+        # defaults per set: the mushroom-body rule as run on 2026-09-14,
+        # the descending-input rule as Hebbian and relative
+        if eligibility is None:
+            eligibility = "presynaptic" if base == "kc_mbon" else "hebbian"
+        if scale is None:
+            scale = "absolute" if base == "kc_mbon" else "relative"
+        assert eligibility in ("presynaptic", "hebbian") and scale in ("absolute", "relative")
         self.brain, self.dt, self.eta, self.rule, self.edge_set = brain, dt, eta, rule, edge_set
-        self.eligibility = eligibility
+        self.base_set, self.shuffled = base, shuffled
+        self.eligibility, self.scale = eligibility, scale
+        # the Hebbian eligibility is heavy-tailed (measured 2026-09-19 on
+        # vis_dn: mean 6, 90th percentile 18, maximum above 10,000), so it is
+        # bounded for the relative rule; a standard saturating eligibility
+        if elig_cap is None:
+            elig_cap = np.inf if scale == "absolute" else 50.0
+        self.elig_cap = float(elig_cap)
         self.lo, self.hi = bounds
         self.teaching_hz, self.pulse_ticks = teaching_hz, pulse_ticks
         self._trace_decay = float(np.exp(-dt / tau_trace_s))
@@ -58,15 +95,26 @@ class MBPlasticity:
         ct = ann["cell_type"].fillna("").astype(str).to_numpy()
         starts = lambda s: np.flatnonzero(np.char.startswith(ct.astype(str), s))
         self.kc, self.mbon, self.pam, self.ppl1 = starts("KC"), starts("MBON"), starts("PAM"), starts("PPL1")
+        sc = ann["super_class"].fillna("").astype(str).to_numpy()
         con = pd.read_parquet(SHIU / "Connectivity_783.parquet",
                               columns=["Presynaptic_Index", "Postsynaptic_Index"])
-        pre = con["Presynaptic_Index"].to_numpy(np.int64); post = con["Postsynaptic_Index"].to_numpy(np.int64)
-        m = np.isin(pre, self.kc) & np.isin(post, self.mbon)
-        if edge_set == "shuffled":
+        pairs = pd.DataFrame({"pre": con["Presynaptic_Index"].to_numpy(np.int64),
+                              "post": con["Postsynaptic_Index"].to_numpy(np.int64)}).drop_duplicates()
+        pre = pairs["pre"].to_numpy(); post = pairs["post"].to_numpy()
+        if base == "kc_mbon":
+            pre_ok, post_ok = np.isin(pre, self.kc), np.isin(post, self.mbon)
+        elif base == "dn_in":
+            pre_ok, post_ok = np.ones(pre.size, bool), sc[post] == "descending"
+        else:  # vis_dn
+            pre_ok, post_ok = np.isin(sc[pre], VISUAL_CLASSES), sc[post] == "descending"
+        m = pre_ok & post_ok
+        if shuffled:
+            # equal number of edges touching neither the set's sources nor its targets
             rng = np.random.default_rng(seed)
-            pool = np.flatnonzero(~m & ~np.isin(pre, self.kc) & ~np.isin(post, self.mbon))
-            m = np.zeros_like(m); m[rng.choice(pool, size=int(np.isin(pre, self.kc).sum() and (np.isin(pre, self.kc) & np.isin(post, self.mbon)).sum()), replace=False)] = True
-        pairs = pd.DataFrame({"pre": pre[m], "post": post[m]}).drop_duplicates()
+            pool = np.flatnonzero(~pre_ok & ~post_ok)
+            n_set = int(m.sum())
+            m = np.zeros_like(m); m[rng.choice(pool, size=n_set, replace=False)] = True
+        pairs = pairs[m]
         self.pre, self.post = pairs["pre"].to_numpy(), pairs["post"].to_numpy()
         self.pos = brain.csc_positions(self.pre, self.post)
         ok = self.pos >= 0
@@ -80,6 +128,9 @@ class MBPlasticity:
         self.da_mean = 0.0
         self.pulse = {"pam": 0, "ppl1": 0}
         self.n_edges = int(self.pos.size)
+        # edges whose measured weight is zero (aminergic, under aminergic="zero")
+        # sit in the set but cannot move: the bounds are 0.1 x 0 to 2 x 0
+        self.n_live = int(np.count_nonzero(self.w0))
 
     # teaching input: which extra rates to inject next tick (shared by all flies)
     def teaching_rates(self) -> dict[str, float]:
@@ -100,7 +151,11 @@ class MBPlasticity:
         elig = self.trace_pre[self.pre]
         if self.eligibility == "hebbian":
             elig = elig * self.trace_post[self.post]
+        if np.isfinite(self.elig_cap):
+            elig = np.minimum(elig, self.elig_cap)
         dw = self.eta * elig * da_c
+        if self.scale == "relative":
+            dw = dw * np.abs(self.w0)
         if self.rule == "on" and da_c != 0.0:
             new_mag = np.clip(self.mag + dw, self.lo * np.abs(self.w0), self.hi * np.abs(self.w0))
             changed = new_mag != self.mag
@@ -117,6 +172,16 @@ class MBPlasticity:
         return {"pam_hz": pam_hz, "ppl1_hz": ppl1_hz, "da": da, "da_centred": da_c,
                 "elig_mean": float(elig.mean()), "drift": drift,
                 "frac_changed": float(np.mean(self.mag != np.abs(self.w0)))}
+
+    def load_weights(self, path) -> None:
+        """Install weights saved by train_plasticity.py (same edge set) and
+        treat them as the starting point; with rule='lr0' this is a frozen
+        evaluation of a learned brain."""
+        z = np.load(path)
+        if z["pos"].size != self.pos.size or not np.array_equal(z["pos"], self.pos):
+            raise ValueError("saved weights are for a different edge set")
+        self.w = z["w"].astype(np.float32); self.mag = np.abs(self.w)
+        self.brain.set_edge_weights(self.pos, self.w)
 
     def reset_traces(self) -> None:
         self.trace_pre[:] = 0; self.trace_post[:] = 0

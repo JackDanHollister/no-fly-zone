@@ -7,11 +7,13 @@ video is written at game time, so it plays back at true speed.
 """
 
 import argparse
+import numpy as np
 import time
 from pathlib import Path
 
 from noflyzone import dashboard
 from noflyzone.brain_backend import BACKENDS, describe, make_brain
+from noflyzone.plasticity import EDGE_SETS, MBPlasticity
 from noflyzone.brain_lif import ABLATIONS
 
 DATASET_LABELS = {"783": "FlyWire v783 (female)", "malecns": "MaleCNS v1.0 (male)"}
@@ -61,6 +63,15 @@ def main() -> None:
                     help="diff: normalised-drive difference; li: lateralisation index")
     ap.add_argument("--trace", default=None,
                     help="write per-tick DN rates/actions to out/<name>.json")
+    ap.add_argument("--learned-weights", default=None,
+                    help="out/plasticity_<tag>_weights.npz from train_plasticity.py: install "
+                         "those synaptic weights (rule off) and label the footer LEARNED WEIGHTS")
+    ap.add_argument("--learn", default=None, choices=list(EDGE_SETS),
+                    help="run the reward-modulated rule live on this edge set while the fly "
+                         "plays (CUDA only): kills pulse PAM, hits pulse PPL1; footer shows drift")
+    ap.add_argument("--learn-eta", type=float, default=2e-5)
+    ap.add_argument("--learn-seed", type=int, default=0, help="seed of a shuffled edge set")
+    ap.add_argument("--video-name", default="m3_demo", help="out/<name>.mp4 with --video")
     args = ap.parse_args()
     calibration = args.calibration or args.readout
 
@@ -68,15 +79,40 @@ def main() -> None:
     t0 = time.time()
     loop = PilotLoop(seed=args.seed, retina_zoom=args.zoom,
                      retina_center=(0.5, 0.5), eye_offset=args.eye_offset)
-    brain = ConnectomeBrain(retina=loop.retina,
-                            brain=make_brain(args.backend, version=args.dataset,
-                                             ablate=args.ablate,
-                                             ablate_seed=args.ablate_seed,
-                                             sensory_input=args.sensory,
-                                             signs=args.signs, aminergic=args.aminergic,
-                                             weight_scale=args.weight_scale),
-                            injection=args.injection, readout=args.readout)
+    core = make_brain(args.backend, version=args.dataset,
+                      ablate=args.ablate, ablate_seed=args.ablate_seed,
+                      sensory_input=args.sensory, signs=args.signs,
+                      aminergic=args.aminergic, weight_scale=args.weight_scale)
+    extra_sites = None
+    if args.learn:
+        # the dopamine populations join the Poisson set as teaching sites
+        ann = core.annotations().drop_duplicates("root_id").set_index("root_id").reindex(core.root_ids)
+        ct = ann["cell_type"].fillna("").astype(str).to_numpy()
+        extra_sites = {"pam": np.flatnonzero(np.char.startswith(ct.astype(str), "PAM")),
+                       "ppl1": np.flatnonzero(np.char.startswith(ct.astype(str), "PPL1"))}
+    brain = ConnectomeBrain(retina=loop.retina, brain=core,
+                            injection=args.injection, readout=args.readout,
+                            extra_sites=extra_sites)
     loop.brain = brain
+    learned = None
+    if args.learned_weights:
+        z = np.load(args.learned_weights)
+        if not np.allclose(core.W.data[z["pos"]], z["w0"]):
+            raise SystemExit("learned weights were saved from a different brain "
+                             "(dataset, wiring or corrections differ)")
+        core.set_edge_weights(z["pos"], z["w"])
+        learned = (f"LEARNED WEIGHTS {Path(args.learned_weights).stem.replace('plasticity_', '').replace('_weights', '')}"
+                   f" ({int((z['w'] != z['w0']).sum()):,} of {z['w'].size:,} synapses changed)")
+        print(learned)
+    plast = None
+    if args.learn:
+        if not hasattr(core, "set_edge_weights"):
+            raise SystemExit("--learn needs the CUDA backend")
+        plast = MBPlasticity(core, dt=loop.dt, eta=args.learn_eta, edge_set=args.learn,
+                             seed=args.learn_seed)
+        print(f"plasticity on: {plast.n_edges:,} edges ({plast.edge_set}, {plast.eligibility}, "
+              f"{plast.scale}); dopamine from PAM/PPL1 teaching pulses, applied as a global "
+              f"modulator (ENGINEERED)")
     loop.controls = type(loop.controls)(
         loop.game.action_meanings, calibration=calibration,
         saccade_hold=args.saccade_hold,
@@ -101,7 +137,8 @@ def main() -> None:
             + (f" | weights x{args.weight_scale:g}" if args.weight_scale != 1.0 else "")
             + (f" | sensory {args.sensory}" if args.sensory != "free" else "")
             + (f" | signs {args.signs}" if args.signs != "predicted" else "")
-            + (f" | aminergic {args.aminergic}" if args.aminergic != "excitatory" else ""))
+            + (f" | aminergic {args.aminergic}" if args.aminergic != "excitatory" else "")
+            + (f" | {learned}" if learned else ""))
     print(mode)
     view = BrainView(brain.brain)
     diag_types = ["Mi1", "T4a", "T4b", "T5a", "LC4", "LPLC2", "LC10a"]
@@ -112,7 +149,7 @@ def main() -> None:
     if args.video:
         import imageio.v2 as imageio
         OUT.mkdir(exist_ok=True)
-        writer = imageio.get_writer(OUT / "m3_demo.mp4",
+        writer = imageio.get_writer(OUT / f"{args.video_name}.mp4",
                                     fps=round(1 / loop.dt),
                                     codec="libx264", quality=8)
 
@@ -120,10 +157,20 @@ def main() -> None:
     trace = []
     names = loop.game.action_meanings
     peak_spiking = 0
+    learn_label = ""
     for i in range(args.steps):
+        if plast is not None:
+            for name, hz in plast.teaching_rates().items():
+                brain.set_extra_rate(name, hz)
         state = loop.step()
         spiking = int((brain.window_counts > 0).sum())
         peak_spiking = max(peak_spiking, spiking)
+        if plast is not None:
+            d = plast.step(brain.window_counts[None, :], kills=np.array([state["reward"] > 0]),
+                           hits=np.array([bool(state["life_lost"])]))
+            learn_label = (f" | PLASTICITY ON {plast.edge_set}: {d['frac_changed'] * 100:.0f}% of "
+                           f"{plast.n_edges:,} synapses moved, drift {d['drift'] * 100:.1f}% "
+                           f"(dopamine ENGINEERED)")
         trace.append({"tick": i, "dn": state["dn"], "drive": dict(loop.controls.drive),
                       "suppressed": bool(loop.controls.suppressed),
                       "steer": loop.controls.steer, "throttle": loop.controls.throttle,
@@ -141,7 +188,7 @@ def main() -> None:
                 state["dn"], loop.total_reward, i * loop.dt,
                 brain=view.render(brain.window_counts),
                 brain_label=f"{loop.brain.brain.n:,} neurons | {spiking:,} spiking",
-                footer=f"NO-FLY-ZONE // {DATASET_LABELS.get(args.dataset, args.dataset)} // {mode}"))
+                footer=f"NO-FLY-ZONE // {DATASET_LABELS.get(args.dataset, args.dataset)} // {mode}{learn_label}"))
         if (i + 1) % 15 == 0:
             dn_str = "  ".join(f"{k} {v:5.1f}" for k, v in state["dn"].items())
             cascade = "  ".join(
@@ -154,7 +201,7 @@ def main() -> None:
     wall = time.time() - t0
     if writer is not None:
         writer.close()
-        print(f"video: {OUT / 'm3_demo.mp4'}")
+        print(f"video: {OUT / f'{args.video_name}.mp4'}")
     game_t = args.steps * loop.dt
     speed = game_t / wall
     print(f"\n{args.steps} steps = {game_t:.1f} s game time in {wall:.1f} s wall "
@@ -164,6 +211,11 @@ def main() -> None:
     # a corrected brain is genuinely silent on a dark game-over screen, so
     # gate on the whole run, not the final tick
     assert peak_spiking > 0, "brain silent for the whole run — injection broken"
+    if plast is not None:
+        OUT.mkdir(exist_ok=True)
+        wpath = OUT / f"m3_learned_{plast.edge_set}_s{args.seed}_weights.npz"
+        np.savez(wpath, pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post)
+        print(f"plasticity: {learn_label.strip(' |')}; weights -> {wpath}")
     if args.trace:
         import json
         OUT.mkdir(exist_ok=True)

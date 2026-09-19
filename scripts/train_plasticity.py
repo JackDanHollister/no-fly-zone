@@ -1,9 +1,14 @@
-"""M7: let the reflex pilot play while its mushroom body learns from kills
-and hits, against the pre-registered controls.
+"""M7: let the reflex pilot play while its brain learns from kills and hits,
+against the pre-registered controls.
 
---rule on      the three-factor rule changes KC -> MBON weights
+--rule on      the three-factor rule changes the chosen edge set
 --rule lr0     the same run with the rule computed but never applied
---edge-set shuffled   the rule on random non-MB edges instead
+--edge-set     kc_mbon (the mushroom body, 2026-09-14), dn_in (every input
+               to a descending neuron), vis_dn (visual inputs to descending
+               neurons), or <set>_shuffled for the size-matched control on
+               edges touching neither end
+--init-weights out/plasticity_<tag>_weights.npz  start from learned weights;
+               with --rule lr0 that is a frozen evaluation of a learned brain
 
 Same seeds and settings across conditions. Logs one line per episode
 (kills, lives lost, weight drift, dopamine statistics) to
@@ -18,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from noflyzone.controls import CockpitControls
-from noflyzone.plasticity import MBPlasticity
+from noflyzone.plasticity import EDGE_SETS, MBPlasticity
 from noflyzone.rl_env import FlySquad
 
 OUT = Path(__file__).resolve().parent.parent / "out"
@@ -27,7 +32,18 @@ OUT = Path(__file__).resolve().parent.parent / "out"
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rule", choices=["on", "lr0"], default="on")
-    ap.add_argument("--edge-set", choices=["kc_mbon", "shuffled"], default="kc_mbon")
+    ap.add_argument("--edge-set", choices=list(EDGE_SETS), default="kc_mbon")
+    ap.add_argument("--eligibility", choices=["presynaptic", "hebbian"], default=None,
+                    help="default: presynaptic for kc_mbon, hebbian for the descending sets")
+    ap.add_argument("--scale", choices=["absolute", "relative"], default=None,
+                    help="default: absolute for kc_mbon, relative for the descending sets")
+    ap.add_argument("--init-weights", default=None)
+    ap.add_argument("--edge-seed", type=int, default=None,
+                    help="seed of a shuffled edge set (default: --seed); lets a learned "
+                         "shuffled set be evaluated on fresh game seeds")
+    ap.add_argument("--elig-cap", type=float, default=None,
+                    help="default: none for absolute scale, 50 for relative")
+    ap.add_argument("--readout", default="pool4")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--episodes", type=int, default=20, help="per fly")
     ap.add_argument("--episode-ticks", type=int, default=900)
@@ -50,12 +66,18 @@ def main() -> None:
     squad.close()
     squad = FlySquad(batch=args.batch, seeds=[args.seed * 100 + i for i in range(args.batch)],
                      episode_ticks=args.episode_ticks, features="brain",
-                     extra_sites={"pam": pam, "ppl1": ppl1})
+                     readout=args.readout, extra_sites={"pam": pam, "ppl1": ppl1})
     plast = MBPlasticity(squad.brain, dt=squad.dt, eta=args.eta, rule=args.rule,
-                         edge_set=args.edge_set, seed=args.seed)
-    print(f"{tag}: {plast.n_edges} plastic edges, {pam.size} PAM + {ppl1.size} PPL1 teaching cells, "
+                         edge_set=args.edge_set,
+                         seed=args.seed if args.edge_seed is None else args.edge_seed,
+                         eligibility=args.eligibility, scale=args.scale, elig_cap=args.elig_cap)
+    if args.init_weights:
+        plast.load_weights(args.init_weights)
+        print(f"loaded weights from {args.init_weights}", flush=True)
+    print(f"{tag}: {plast.n_edges} plastic edges ({plast.edge_set}, {plast.eligibility}, {plast.scale}), "
+          f"{pam.size} PAM + {ppl1.size} PPL1 teaching cells, "
           f"{args.batch} flies x {args.episodes} episodes of {args.episode_ticks} ticks", flush=True)
-    controls = [CockpitControls(squad.action_names, calibration="pool4", saccade_hold=3,
+    controls = [CockpitControls(squad.action_names, calibration=args.readout, saccade_hold=3,
                                 startle_refractory=15, steer_mode="li") for _ in range(args.batch)]
     OUT.mkdir(exist_ok=True)
     log = open(OUT / f"plasticity_{tag}.jsonl", "w")
@@ -88,7 +110,7 @@ def main() -> None:
             print(f"ep {done_eps:3d}/{target} fly {i} #{ep_index[i]:2d}: kills {e['kills']} lives {e['lives_lost']} "
                   f"| drift {d['drift']:.4f} changed {d['frac_changed']:.3f} | PAM {row['pam_hz']:.1f} PPL1 {row['ppl1_hz']:.1f} Hz", flush=True)
             if infos[i]["game_over"]:
-                controls[i] = CockpitControls(squad.action_names, calibration="pool4", saccade_hold=3,
+                controls[i] = CockpitControls(squad.action_names, calibration=args.readout, saccade_hold=3,
                                               startle_refractory=15, steer_mode="li")
     np.savez(OUT / f"plasticity_{tag}_weights.npz", pos=plast.pos, w0=plast.w0, w=plast.w,
              pre=plast.pre, post=plast.post)

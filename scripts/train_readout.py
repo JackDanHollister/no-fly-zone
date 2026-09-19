@@ -70,6 +70,8 @@ def main() -> None:
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--clip", type=float, default=0.2)
     ap.add_argument("--entropy", type=float, default=0.01)
+    ap.add_argument("--life-penalty", type=float, default=0.5,
+                    help="reward per life lost is minus this; a kill is +1. 0.1 is the kill-shaped setting")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--injection", default="v4")
     ap.add_argument("--zoom", type=float, default=2.0)
@@ -83,7 +85,7 @@ def main() -> None:
     squad = FlySquad(batch=args.batch, seeds=[args.seed * 100 + i for i in range(args.batch)],
                      injection=args.injection, zoom=args.zoom, eye_offset=args.eye_offset,
                      brain_kwargs={"ablate": ablate}, episode_ticks=args.episode_ticks,
-                     features=args.features)
+                     features=args.features, life_penalty=args.life_penalty)
     print(f"squad of {args.batch}: brain {args.brain}, features {args.features} "
           f"({squad.n_features} dims), {squad.n_actions} actions, episode {args.episode_ticks} ticks",
           flush=True)

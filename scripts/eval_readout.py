@@ -38,27 +38,27 @@ def main() -> None:
     ap.add_argument("--ckpts", nargs="+", default=["out/readout_connectome_brain_s0.pt",
                                                    "out/readout_rewired_brain_s0.pt",
                                                    "out/readout_connectome_retina_s0.pt"])
+    ap.add_argument("--out", default="out/eval_readout.json")
+    ap.add_argument("--skip-baselines", action="store_true")
     args = ap.parse_args()
     dev = torch.device("cuda")
     results = {}
     B = len(args.seeds)
-    # baselines on the measured brain
-    squad = FlySquad(batch=B, seeds=args.seeds, features="brain", episode_ticks=900)
-    rng = np.random.default_rng(0)
-    k, l = run(squad, lambda o, s: rng.integers(0, s.n_actions, size=s.B), args.ticks)
-    results["random policy"] = (k, l); print(f"random policy        kills {k.mean():.2f} ± {k.std():.2f}  lives {l.mean():.2f} ± {l.std():.2f}  per 900 ticks over {B} seeds", flush=True)
-    ctrls = [CockpitControls(squad.action_names, calibration="pool4", saccade_hold=3, startle_refractory=15, steer_mode="li") for _ in range(B)]
-    def reflex(o, s):
-        acts = np.array([c.to_action() for c in ctrls])
-        return acts
-    obs = squad.reset(); kills = np.zeros(B); lives = np.zeros(B)
-    for t in range(args.ticks):
-        a = reflex(obs, squad); obs, rew, done, infos = squad.step(a)
-        for i, c in enumerate(ctrls): c.update(squad.last_dn[i], squad.dt)
-        kills += [i["kill"] for i in infos]; lives += [i["life_lost"] for i in infos]
-    k, l = kills / (args.ticks / 900), lives / (args.ticks / 900)
-    results["reflex pilot"] = (k, l); print(f"reflex pilot         kills {k.mean():.2f} ± {k.std():.2f}  lives {l.mean():.2f} ± {l.std():.2f}", flush=True)
-    squad.close()
+    if not args.skip_baselines:
+        # baselines on the measured brain
+        squad = FlySquad(batch=B, seeds=args.seeds, features="brain", episode_ticks=900)
+        rng = np.random.default_rng(0)
+        k, l = run(squad, lambda o, s: rng.integers(0, s.n_actions, size=s.B), args.ticks)
+        results["random policy"] = (k, l); print(f"random policy        kills {k.mean():.2f} ± {k.std():.2f}  lives {l.mean():.2f} ± {l.std():.2f}  per 900 ticks over {B} seeds", flush=True)
+        ctrls = [CockpitControls(squad.action_names, calibration="pool4", saccade_hold=3, startle_refractory=15, steer_mode="li") for _ in range(B)]
+        obs = squad.reset(); kills = np.zeros(B); lives = np.zeros(B)
+        for t in range(args.ticks):
+            a = np.array([c.to_action() for c in ctrls]); obs, rew, done, infos = squad.step(a)
+            for i, c in enumerate(ctrls): c.update(squad.last_dn[i], squad.dt)
+            kills += [i["kill"] for i in infos]; lives += [i["life_lost"] for i in infos]
+        k, l = kills / (args.ticks / 900), lives / (args.ticks / 900)
+        results["reflex pilot"] = (k, l); print(f"reflex pilot         kills {k.mean():.2f} ± {k.std():.2f}  lives {l.mean():.2f} ± {l.std():.2f}", flush=True)
+        squad.close()
     for ck_path in args.ckpts:
         ck = torch.load(ck_path, weights_only=False)
         ablate = "none" if ck["brain"] == "connectome" else ck["brain"]
@@ -71,12 +71,12 @@ def main() -> None:
                 logits, _ = net(torch.from_numpy(x).to(dev))
             return logits.argmax(-1).cpu().numpy()
         k, l = run(squad, greedy, args.ticks)
-        name = f"{ck['brain']} head ({ck['features']})"
+        name = f"{ck['brain']} head ({ck['features']}) {Path(ck_path).stem.replace('readout_', '')}"
         results[name] = (k, l); print(f"{name:20s} kills {k.mean():.2f} ± {k.std():.2f}  lives {l.mean():.2f} ± {l.std():.2f}", flush=True)
         squad.close()
     OUT.mkdir(exist_ok=True)
-    (OUT / "eval_readout.json").write_text(json.dumps({n: {"kills": k.tolist(), "lives": l.tolist()} for n, (k, l) in results.items()}, indent=1))
-    print("wrote out/eval_readout.json")
+    Path(args.out).write_text(json.dumps({n: {"kills": k.tolist(), "lives": l.tolist()} for n, (k, l) in results.items()}, indent=1))
+    print(f"wrote {args.out}")
 
 
 if __name__ == "__main__":
