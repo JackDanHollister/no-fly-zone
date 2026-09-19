@@ -83,7 +83,78 @@ INJECTION_MAPS = {
         ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
         ("T3", "onoff", 3000.0),
     ],
+    # v4 plus the slow inhibitory inputs of T4: Mi4 (GABA, sustained ON,
+    # low-passed luminance) and Mi9 (glutamate, sustained in the dark,
+    # low-passed darkness). The fly's T4 direction selectivity comes from
+    # these arriving from neighbouring columns with slower kinetics than
+    # Mi1/Tm3; the columns are in the wiring, the kinetics have to be
+    # injected. Gains in Hz at full-scale signal; tau in LOWPASS_TAU.
+    "v5": [
+        ("R1-6", "lum", MAX_PR_RATE),
+        ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+        ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+        ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+        ("T3", "onoff", 3000.0),
+        ("Mi4", "lum_lp", 80.0), ("Mi9", "dark_lp", 80.0),
+    ],
 }
+LOWPASS_TAU = 0.15  # s, the slow channels' time constant
+
+# v6: direction computed OUTSIDE the wiring. A Hassenstein-Reichardt
+# correlator over neighbouring ommatidia (this tick's ON or OFF transient at
+# the neighbour times last tick's at the cell, minus the reverse) gives four
+# direction channels per eye; they are injected at the four T4 subtypes (ON)
+# and four T5 subtypes (OFF). The probe of 2026-09-18 showed the LIF cannot
+# make T4 direction-selective from columnar inputs (point neurons, one fixed
+# delay), so this replaces exactly that stage with an engineered one and
+# leaves everything downstream of T4/T5 on the connectome. The letter-to-
+# direction assignment (a: +x, b: -x, c: +y, d: -y on the retina's
+# normalised axes) is a convention and is recorded with the map.
+INJECTION_MAPS["v6"] = INJECTION_MAPS["v4"] + [
+    ("T4a", "on_dir_px", 20000.0), ("T4b", "on_dir_mx", 20000.0),
+    ("T4c", "on_dir_py", 20000.0), ("T4d", "on_dir_my", 20000.0),
+    ("T5a", "off_dir_px", 20000.0), ("T5b", "off_dir_mx", 20000.0),
+    ("T5c", "off_dir_py", 20000.0), ("T5d", "off_dir_my", 20000.0),
+]
+DIR_VECTORS = {"px": (1.0, 0.0), "mx": (-1.0, 0.0), "py": (0.0, 1.0), "my": (0.0, -1.0)}
+# v6m: the same correlator with the right eye's horizontal channels mirrored
+# (T4a/T5a get -x, T4b/T5b get +x on the right), so "a" means the same
+# body-relative direction in both eyes as it does in the fly, where the two
+# eyes' front-to-back axes are mirror images. With v6 a full-screen sweep
+# drives the same subtype on both sides; with v6m it drives opposite ones,
+# which is what yaw optic flow does to a real fly. Which of the two screen
+# directions is "front-to-back" is a convention, recorded here as: on the
+# left eye +x (screen left to right) is channel a.
+INJECTION_MAPS["v6m"] = INJECTION_MAPS["v4"] + [
+    ("T4a", "on_dir_px|mx", 20000.0), ("T4b", "on_dir_mx|px", 20000.0),
+    ("T4c", "on_dir_py", 20000.0), ("T4d", "on_dir_my", 20000.0),
+    ("T5a", "off_dir_px|mx", 20000.0), ("T5b", "off_dir_mx|px", 20000.0),
+    ("T5c", "off_dir_py", 20000.0), ("T5d", "off_dir_my", 20000.0),
+]
+
+
+def lattice_neighbours(xy: np.ndarray) -> dict[str, np.ndarray]:
+    """For each ommatidium, the index of its neighbour one lattice spacing
+    away in each of DIR_VECTORS (-1 at the edge)."""
+    xy = np.asarray(xy, np.float64)
+    tree = cKDTree(xy)
+    spacing = float(np.median(tree.query(xy, k=2)[0][:, 1]))
+    out = {}
+    for key, (dx, dy) in DIR_VECTORS.items():
+        dist, j = tree.query(xy + spacing * np.array([dx, dy]))
+        out[key] = np.where(dist < 0.6 * spacing, j, -1)
+    return out
+
+
+def reichardt(cur: np.ndarray, prev: np.ndarray, nb: np.ndarray) -> np.ndarray:
+    """Hassenstein-Reichardt output per ommatidium for motion toward the
+    neighbour: a transient that was here last tick and is at the neighbour
+    now, minus the reverse, rectified."""
+    ok = nb >= 0
+    fwd = np.zeros_like(cur); back = np.zeros_like(cur)
+    fwd[ok] = cur[nb[ok]] * prev[ok]
+    back[ok] = cur[ok] * prev[nb[ok]]
+    return np.clip(fwd - back, 0.0, None)
 INJECTION_SITES = INJECTION_MAPS["v0"]
 TRANSIENT_CAP = 400.0  # Hz ceiling on injected transient rates
 
@@ -94,13 +165,38 @@ STEER_POOL = ["DNp07", "DNb05", "DNg52", "DNb06", "DNa02"]
 # DNp12 is the loom-selective type in the screen (24 Hz loom, 0.6 Hz small
 # object); DNbe001 was dropped because it also fires for a tank sitting ahead
 LOOM_POOL = ["DNp12", "DNp01"]
+# the within-hemisphere rewiring control's OWN screened pools (screen_dns.py
+# --ablate rewired_ipsi --ablate-seed 0, injection v4, 2026-09-18): the five
+# descending types that lateralise best with a small object in THAT graph,
+# and its two loom-selective types. A control brain gets the same readout
+# procedure as the measured one, not the measured one's pools.
+STEER_POOL_IPSI0 = ["DNp103", "DNge041", "DNge104", "DNa10", "DNae009"]
+LOOM_POOL_IPSI0 = ["DNp102", "DNg84"]
+# MaleCNS v1.0 at weights x0.6, its own screen (screen_dns.py --dataset
+# malecns --weight-scale 0.6, injection v4, 2026-09-18): descending types
+# lateralised (LI > 0.5) on both a small object and a bar, ranked by
+# response, and its loudest loom-selective types plus the giant fibre.
+# DNb05 and DNp07 are in the female pool too; DNp04, DNp02 and DNp20 are not.
+STEER_POOL_MALE = ["DNp04", "DNb05", "DNp02", "DNp20", "DNp07"]
+LOOM_POOL_MALE = ["DNg33", "DNp12", "DNp01"]
+# "yaw": the descending types whose left-minus-right rate flips sign with
+# the direction of yaw optic flow under injection v6m (probe_motion.py
+# --yaw, 2026-09-18): DNp15, DNg41, DNae002, DNa02, DNa15, all with
+# |direction index| > 0.85 on both sides. Under the v6m convention the LEFT
+# cells fire for screen-rightward motion, so to steer TOWARD the motion
+# (pursuit; also the stabilising sense of the optomotor response) the
+# contract's left key reads the right-side cells and vice versa. Drive and
+# startle as pool4. An engineered front end feeds it; labelled as such.
+YAW_POOL = ["DNp15", "DNg41", "DNae002", "DNa02", "DNa15"]
 READOUT_MAPS = {
     # the M3/M4 map: single named cells
     "v0": {
         "DNa02_L": [("cell_type", "DNa02", ("left",))],
         "DNa02_R": [("cell_type", "DNa02", ("right",))],
         "DNg100": [("cell_type", "DNg100", None)],
-        "pIP10": [("cell_type_prefix", "oviDN", None)],  # female stand-in
+        # pIP10 itself where the dataset has it (MaleCNS); the female
+        # FlyWire brain has none, so the oviposition DNs stand in
+        "pIP10": [("cell_type", "pIP10", None), ("cell_type_prefix", "oviDN", None)],
         "DNp01": [("cell_type", "DNp01", None)],
     },
     # from the 2026-09-14 DN screen with injection v4: the descending types
@@ -113,6 +209,29 @@ READOUT_MAPS = {
         "DNg100": [("cell_type", "DNg100", None)],
         "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
         "DNp01": [("cell_type", t, None) for t in LOOM_POOL],
+    },
+    "yaw": {
+        "DNa02_L": [("cell_type", t, ("right",)) for t in YAW_POOL],
+        "DNa02_R": [("cell_type", t, ("left",)) for t in YAW_POOL],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
+        "DNp01": [("cell_type", t, None) for t in LOOM_POOL],
+    },
+    # pool4's recipe applied to the male brain's own screen
+    "pool_male": {
+        "DNa02_L": [("cell_type", t, ("left",)) for t in STEER_POOL_MALE],
+        "DNa02_R": [("cell_type", t, ("right",)) for t in STEER_POOL_MALE],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
+        "DNp01": [("cell_type", t, None) for t in LOOM_POOL_MALE],
+    },
+    # pool4's recipe applied to the rewired_ipsi seed-0 brain's own screen
+    "pool_ipsi0": {
+        "DNa02_L": [("cell_type", t, ("left",)) for t in STEER_POOL_IPSI0],
+        "DNa02_R": [("cell_type", t, ("right",)) for t in STEER_POOL_IPSI0],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
+        "DNp01": [("cell_type", t, None) for t in LOOM_POOL_IPSI0],
     },
 }
 READOUT = READOUT_MAPS["v0"]
@@ -142,7 +261,7 @@ class ConnectomeBrain:
         self.injection = injection
         self.sites = INJECTION_MAPS[injection]
         self.readout = readout
-        ann = annotations()
+        ann = self.brain.annotations()
 
         # retinotopic injection map: per (population, eye)
         self._pops: list[tuple[str, float, slice, np.ndarray, str]] = []
@@ -155,7 +274,9 @@ class ConnectomeBrain:
                            & (ann["side"] == side)]
                 ids = rows["root_id"].to_numpy(np.int64)
                 pos = rows[["pos_x", "pos_y", "pos_z"]].to_numpy(float)
-                keep = np.array([int(r) in self.brain.index_of for r in ids])
+                # cells without a position cannot be placed on the retina
+                keep = np.array([int(r) in self.brain.index_of for r in ids]) \
+                    & np.isfinite(pos).all(axis=1)
                 ids, pos = ids[keep], pos[keep]
                 bidx = np.array([self.brain.index_of[int(r)] for r in ids],
                                 dtype=np.int64)
@@ -175,6 +296,10 @@ class ConnectomeBrain:
         self.n_visual = int(sum(sl.stop - sl.start for _, _, sl, _, _ in self._pops))
         self._prev_lum: dict[str, np.ndarray | None] = {"left": None,
                                                         "right": None}
+        self._lp: dict[str, np.ndarray | None] = {"left": None, "right": None}
+        self._prev_onoff: dict[str, tuple[np.ndarray, np.ndarray] | None] = {"left": None, "right": None}
+        # neighbour index in each lattice direction (-1 at the edge), for v6
+        self._nb = lattice_neighbours(retina.centers_xy)
 
         self._readout: dict[str, np.ndarray] = {}
         self._derived: dict[str, tuple[str, tuple[str, str]]] = {}
@@ -221,16 +346,35 @@ class ConnectomeBrain:
         self.brain.reset()
         self._register()
         self._prev_lum = {"left": None, "right": None}
+        self._lp = {"left": None, "right": None}
+        self._prev_onoff = {"left": None, "right": None}
+
+    def _direction(self, cur: np.ndarray, prev: np.ndarray, key: str) -> np.ndarray:
+        return reichardt(cur, prev, self._nb[key])
 
     def step(self, drives: dict[str, np.ndarray], dt: float,
              signals: dict | None = None) -> dict[str, float]:
         lum = {side: drives[side][:, 0] for side in ("left", "right")}
         delta = {}
+        alpha = 1.0 - np.exp(-dt / LOWPASS_TAU)
         for side in lum:
             prev = self._prev_lum[side]
             delta[side] = (lum[side] - prev) if prev is not None \
                 else np.zeros_like(lum[side])
             self._prev_lum[side] = lum[side]
+            lp = self._lp[side]
+            self._lp[side] = lum[side].copy() if lp is None \
+                else lp + alpha * (lum[side] - lp)
+        onoff = {side: (np.clip(delta[side], 0.0, None), np.clip(-delta[side], 0.0, None))
+                 for side in lum}
+        dirs: dict[tuple[str, str], np.ndarray] = {}
+        for side in lum:
+            prev = self._prev_onoff[side]
+            if prev is not None:
+                for key in DIR_VECTORS:
+                    dirs[(side, "on_dir_" + key)] = self._direction(onoff[side][0], prev[0], key)
+                    dirs[(side, "off_dir_" + key)] = self._direction(onoff[side][1], prev[1], key)
+            self._prev_onoff[side] = onoff[side]
         for mode, gain, sl, omm, side in self._pops:
             if mode == "lum":
                 sig = lum[side][omm]
@@ -238,6 +382,17 @@ class ConnectomeBrain:
                 sig = np.clip(delta[side][omm], 0.0, None)
             elif mode == "off":
                 sig = np.clip(-delta[side][omm], 0.0, None)
+            elif mode == "lum_lp":     # slow sustained ON
+                sig = self._lp[side][omm]
+            elif mode == "dark_lp":    # slow sustained in the dark
+                sig = 1.0 - self._lp[side][omm]
+            elif mode.startswith(("on_dir_", "off_dir_")):  # v6 correlator channels
+                key = mode
+                if "|" in mode:  # "left|right" channel names (v6m mirrors the right eye)
+                    base, alt = mode.split("|")
+                    key = base if side == "left" else base.rsplit("_", 1)[0] + "_" + alt
+                d = dirs.get((side, key))
+                sig = d[omm] if d is not None else np.zeros(len(omm), np.float32)
             else:  # onoff: any change
                 sig = np.abs(delta[side][omm])
             self._rates[sl] = np.minimum(sig * gain, TRANSIENT_CAP)
@@ -268,7 +423,7 @@ class BrainView:
 
     def __init__(self, brain: ShiuBrain, width: int = 480, height: int = 360):
         self.w, self.h = width, height
-        ann = annotations().set_index("root_id")
+        ann = brain.annotations().set_index("root_id")
         ann = ann[~ann.index.duplicated()]
         pos = ann.reindex(brain.root_ids)[["pos_x", "pos_y"]].to_numpy(float)
         self._valid = np.flatnonzero(~np.isnan(pos).any(axis=1))

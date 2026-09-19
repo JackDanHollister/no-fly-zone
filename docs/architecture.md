@@ -178,14 +178,23 @@ the code delivers. Fix the code or the wording, then delete the line.
   CUDA graphs, `pip install -e ".[cuda]"`) is step-exact against the SciPy
   reference for 500 steps and within 1% over chaotic horizons; there is still
   no MPS backend, so the Mac stays on SciPy.
-- Dataset: only FlyWire v783 from the Shiu GitHub repo is loaded
-  (`Completeness_783.csv`, `Connectivity_783.parquet`). No MaleCNS loader; the
-  Zenodo dump is not fetched.
+- Dataset: FlyWire v783 from the Shiu GitHub repo is the default
+  (`Completeness_783.csv`, `Connectivity_783.parquet`). Since 2026-09-18
+  `brain_lif.DATASETS` also names MaleCNS v1.0, converted by
+  `scripts/build_malecns.py` from the pinned flat-connectome feathers into
+  the same three shapes (166,700 neurons, 25.6M signed pairs, annotations in
+  the FlyWire vocabulary, `data/malecns/cache/manifest.json`); every script
+  takes `--dataset malecns`. At Shiu gains the male brain is over-excited
+  (about 11,000 spiking neurons per tick against 2,000 for FlyWire on the
+  same stimuli) and its usable weight window is narrow; see
+  `docs/research/wiring-controls-2026-09-18.md`. The Zenodo dump is still
+  not fetched.
 - Mode flag: `--pilot wired|embodied` exists nowhere. `run_m2.py` and
   `run_m3.py` take only `--steps` and `--video`.
 - FIRE channel: pIP10 is absent from the female v783 brain;
-  `brain_connectome.py` reads oviDN under the `pIP10` key and the dashboard bar
-  still says pIP10.
+  `brain_connectome.py` reads oviDN under the `pIP10` key (and pIP10 itself
+  where a dataset has it, as MaleCNS does) and the dashboard bar still says
+  pIP10.
 - Motor swap: the M3 hand-over changed `controls.py` (idle_throttle,
   idle_steer) rather than only `dn.py` calibration entries, contrary to the
   M2 interface decision above. The `dn.py` spans were tuned for the stub and

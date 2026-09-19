@@ -28,6 +28,8 @@ def make_brain(backend: str = "auto", seed: int = 0, **kwargs) -> ShiuBrain:
 
 def describe(brain: ShiuBrain) -> str:
     base = getattr(brain, "backend", "cpu:sparse-scipy")
+    if getattr(brain, "version", "783") != "783":
+        base = f"{base} dataset:{brain.version}"
     ablate = getattr(brain, "ablate", "none")
     if ablate != "none":
         base = f"{base} ABLATED:{ablate}"
@@ -37,4 +39,6 @@ def describe(brain: ShiuBrain) -> str:
         base = f"{base} signs:{brain.signs}"
     if getattr(brain, "aminergic", "excitatory") != "excitatory":
         base = f"{base} aminergic:{brain.aminergic}"
+    if getattr(brain, "weight_scale", 1.0) != 1.0:
+        base = f"{base} weights x{brain.weight_scale:g}"
     return base

@@ -144,7 +144,8 @@ class ShiuBrainCUDA(ShiuBrain):
                  device: str = "cuda", use_graph: bool = True,
                  ablate: str = "none", ablate_seed: int = 0,
                  sensory_input: str = "free", signs: str = "predicted",
-                 aminergic: str = "excitatory", batch: int = 1):
+                 aminergic: str = "excitatory", weight_scale: float = 1.0,
+                 batch: int = 1):
         if not torch.cuda.is_available():
             raise RuntimeError("ShiuBrainCUDA: no CUDA device visible to torch")
         if batch < 1:
@@ -156,7 +157,8 @@ class ShiuBrainCUDA(ShiuBrain):
         self._ready = False
         super().__init__(version=version, seed=seed, ablate=ablate,
                          ablate_seed=ablate_seed, sensory_input=sensory_input,
-                         signs=signs, aminergic=aminergic)  # loads W, reset()
+                         signs=signs, aminergic=aminergic,
+                         weight_scale=weight_scale)  # loads W, reset()
         dev = self._device
         W = self.W
         self._indptr = torch.from_numpy(W.indptr.astype(np.int32)).to(dev)

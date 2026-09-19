@@ -30,10 +30,15 @@ MN9_ID = 720575940660219265
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--backend", choices=BACKENDS, default="auto")
+    ap.add_argument("--dataset", default="783", help="brain_lif.DATASETS key: 783 (FlyWire) or malecns")
+    ap.add_argument("--aminergic", choices=["excitatory", "zero"], default="excitatory")
+    ap.add_argument("--sensory", choices=["free", "external_only"], default="free")
     args = ap.parse_args()
     t0 = time.time()
-    print("loading connectome (138k neurons, 15.1M edges)...", flush=True)
-    brain = make_brain(args.backend)
+    print(f"loading connectome {args.dataset}...", flush=True)
+    brain = make_brain(args.backend, version=args.dataset, aminergic=args.aminergic,
+                       sensory_input=args.sensory)
+    print(f"  {brain.n} neurons, {brain.W.nnz} edges")
     print(f"loaded in {time.time() - t0:.0f} s | backend {describe(brain)}")
 
     # 1 — silence control
@@ -42,23 +47,37 @@ def main() -> None:
     print(f"\n[1] no input, 200 ms: {counts.sum()} spikes network-wide")
     assert counts.sum() == 0, "network is spontaneously active — dynamics wrong"
 
-    # 2 — sugar -> MN9
-    sugar_idx, missing = brain.indices_of(SUGAR_GRN_IDS)
-    print(f"\n[2] sugar GRNs present in v783: {len(sugar_idx)}/21 "
-          f"(missing {len(missing)})")
-    mn9_idx, mn9_missing = brain.indices_of([MN9_ID])
-    assert len(mn9_idx) == 1, f"MN9 {MN9_ID} not in v783 completeness"
+    # 2 — sugar -> MN9 (the Shiu root ids are FlyWire; on another dataset
+    # the sugar GRNs are found by type and MN9 by type, both sides)
+    if args.dataset == "783":
+        sugar_idx, missing = brain.indices_of(SUGAR_GRN_IDS)
+        print(f"\n[2] sugar GRNs present in v783: {len(sugar_idx)}/21 "
+              f"(missing {len(missing)})")
+        mn9_idx, mn9_missing = brain.indices_of([MN9_ID])
+        assert len(mn9_idx) == 1, f"MN9 {MN9_ID} not in v783 completeness"
+    else:
+        ann = brain.annotations()
+        ct = ann["cell_type"].astype(str)
+        sugar_rows = ann[ct.str.contains("sugar", case=False) | ct.str.match(r"^GRN.*sugar", case=False)]
+        sugar_idx, _ = brain.indices_of(sugar_rows["root_id"].to_numpy())
+        mn9_idx = brain.indices_for_type("MN9")
+        print(f"\n[2] sugar GRNs by type in {args.dataset}: {len(sugar_idx)} "
+              f"({sorted(set(sugar_rows['cell_type']))[:6]}...), MN9 cells {len(mn9_idx)}")
+        assert len(mn9_idx) >= 1, "MN9 not found by type"
     brain.reset()
     brain.set_poisson({int(i): 150.0 for i in sugar_idx})
     t0 = time.time()
     counts = brain.run(1.0, progress_every=2500)
-    mn9_rate = counts[mn9_idx[0]]
+    mn9_rate = counts[mn9_idx].max()
     print(f"    1 s sim in {time.time() - t0:.1f} s wall; "
           f"network spikes {counts.sum()}, neurons active "
           f"{(counts > 0).sum()}")
     print(f"    MN9 rate: {mn9_rate} Hz "
           f"(published: robust firing under sugar activation)")
-    assert mn9_rate > 5, "MN9 barely fires — feeding circuit not reproduced"
+    if sugar_idx.size:
+        assert mn9_rate > 5, "MN9 barely fires — feeding circuit not reproduced"
+    else:
+        print("    (no sugar GRNs identified by type; gate 2 skipped)")
 
     # 3 — looming -> Giant Fiber (our escape pathway)
     lc4_idx = brain.indices_for_type("LC4")

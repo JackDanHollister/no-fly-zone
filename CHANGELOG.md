@@ -1,5 +1,115 @@
 # Changelog
 
+## [2026-09-18] - Night session: the male in the game, and direction through the wiring
+
+- `READOUT_MAPS["pool_male"]` from the male's own screen at weights x0.6
+  (steer DNp04, DNb05, DNp02, DNp20, DNp07; loom DNg33, DNp12, DNp01).
+  `bench_pilots.py --dataset malecns`, ten independent episodes: the male
+  kills 1.2 and dies 2.7 per 100 s (female 2.7 / 5.7), reverses on half its
+  ticks, steers toward the target 10 of 12 gated looks; its shuffles never
+  cross the gate. `make_video.py sidebyside --preset fight` cuts seed 0 of
+  each into `out/no-fly-zone-female-vs-male.mp4` (the tool now streams
+  frames instead of re-decoding per frame).
+- `scripts/probe_motion.py`: bars in four directions, orientation-free test
+  of T4/T5 subtype opponency. Null for v4 and v5 (new map: v4 plus Mi4 as
+  low-passed luminance and Mi9 as low-passed darkness, tau 150 ms): every
+  subtype at 1.5-4.5 Hz in all directions in every brain. A point LIF with
+  one fixed delay does not do the T4 computation.
+- Injection map v6: a Hassenstein-Reichardt correlator over neighbouring
+  ommatidia, four ON directions injected at T4a-d and four OFF at T5a-d,
+  replacing exactly that stage and labelled engineered. Downstream, the
+  measured FlyWire wiring makes HSE/HSN/HSS horizontally selective
+  (93-116 Hz versus 0-11) and VS1-4 vertically selective (silent for the
+  null direction), and ten descending types direction-selective at both
+  sweep speeds (DNg41, DNp15, DNp22, DNae002, DNa15, DNae010, DNa10, DNa02
+  at 48 Hz, DNa16, DNge033); the within-hemisphere shuffle leaves HS/VS
+  flat and has no consistent descending type. The male at x0.6 replicates
+  it (HSE 168 / 0.6 Hz, H2 opposite to HS as in the fly; 47 direction-
+  selective descending types against 8). Selectivity screen with v6:
+  20 direction-selective descending types to a bar against 1-6. In the
+  game with pool4, v6 changes nothing (2.5 kills, 45 of 47 correct steers):
+  the readout reads position, not motion. `lattice_neighbours` and
+  `reichardt` are module functions with a no-data unit test.
+- `probe_motion.py --yaw` (both eyes swept together) and injection map v6m
+  (right eye's horizontal channels mirrored, as the fly's eyes are): the
+  two HS systems oppose (HSE left 113 / 0 Hz, right 11 / 140), H2 the other
+  way, and 14 descending types flip their right-minus-left rate with yaw
+  direction (DNp15 to 98 Hz, DNg41, DNa02 43 / 3 versus 1 / 22, DNae002,
+  DNa15, ...) against 3 weak ones in the shuffle; with v6 (no mirror) only
+  4. `READOUT_MAPS["yaw"]` reads the five strongest, sides swapped to steer
+  toward motion. In the game the yaw pilot kills 2.4 and dies 4.3 per
+  100 s against pool4's 2.2 and 5.9 on v6m; the position-based steering
+  metric cannot score a motion readout (a motion-signed metric is next).
+  `run_m3.py` HUD now shows the loaded dataset and its neuron count
+  instead of the FlyWire constants.
+
+## [2026-09-18] - Selectivity screen, MaleCNS loader, second-individual replication
+
+- `scripts/screen_selectivity.py`: every descending type's ipsilateral
+  response to a small moving disc, a tank-sized disc, a loom, the same loom
+  played backwards (receding disc, after nsfm/fly-afterlife withdrew a loom
+  claim that was reading brightness rather than expansion), a full-field
+  flash and bars in both directions; indices for size tuning, expansion
+  versus contraction, loom versus flash, loom versus bar and direction;
+  every brain gets the identical procedure. FlyWire: 58 responsive DN types
+  against about 355 in three within-hemisphere rewirings (287-312 when
+  gain-matched), small-object drive up to 47 Hz (DNg100) against 14, and
+  14 expansion-selective types (DNp12 among them) against 0-2. No brain
+  has size tuning or direction selectivity: a front-end limit.
+- `scripts/build_malecns.py`: MaleCNS v1.0 flat connectome (hash-pinned,
+  CC-BY 4.0) converted into the loader's three files: 166,700 neurons,
+  25,582,938 signed pairs, annotations in the FlyWire vocabulary, "R1-R6"
+  renamed "R1-6", manifest with every decision. `brain_lif.DATASETS` and
+  `annotations(version)`; `--dataset malecns` on validate_brain, run_m3,
+  bench_pilots, screen_dns and screen_selectivity; the v0 readout reads
+  pIP10 itself where it exists. `tests/test_malecns.py`.
+- MaleCNS at Shiu gains is over-excited (11,000 spiking neurons per tick
+  against FlyWire's 2,000 on the same stimuli; pools saturated at 74 Hz)
+  with a narrow window, as flybench reports; at weights x0.6 it matches
+  FlyWire's regime and replicates the pattern: 84 responsive DN types
+  against 412-424 in its own shuffles, DNg100 the top small-object
+  responder in both flies, DNp12 expansion-selective in both, DNp07
+  lateralised in both. The female pool4 does not transfer as a whole.
+- Sweep of the fly-connectome wave since the 14th, kept privately in the
+  workspace: another group finds a degree-preserving rewiring recruits 8x
+  more cells at matched rate; no one else has a within-hemisphere control.
+
+## [2026-09-18] - Wiring controls: the connectome keeps left from right; a random graph does not
+
+- `ShiuBrain(ablate="rewired_ipsi")`: targets permuted within each
+  hemisphere (annotation `side`), so gross laterality survives and only the
+  within-hemisphere circuit is destroyed; `weight_scale` multiplies every
+  weight for gain-matched controls. Both recorded in `meta` and on the HUD;
+  `run_m3.py` gains `--ablate rewired_ipsi`, `--ablate-seed`,
+  `--weight-scale`. `tests/test_controls_wiring.py` checks the shuffle keeps
+  every cell's total output and each side's total input.
+- `screen_dns.py` takes the loader flags and prints a summary: responsive
+  DN types, how many lateralise consistently, the pool4 steer pools' LI and
+  the firing regime. Measured brain: four types at |LI| > 0.8, pools LI
+  +0.92. Three whole-brain rewirings: 0-1 types, pools LI +0.03 / -0.11 /
+  +0.21; scaling their weights by 0.7 matches the measured regime (2,193
+  versus 2,188 spiking neurons per tick) and changes nothing. The
+  within-hemisphere rewiring: eight types at LI +1.00.
+- `bench_pilots.py`: `--ablate-seeds`, `--rewired-scales`, per-condition
+  tokens (`rewired@1x0.7`, `rewired_ipsi:pool_ipsi0`), and a steering
+  correctness metric: on look ticks where the retina's transient energy is
+  clearly on one side and the pools cross the steering gate, does the sign
+  of the pool LI match? Pooled over ten 100 s episodes: measured wiring
+  62/63 correct (binomial p 7e-18); five rewirings 66/165, each at chance
+  or below with its own fixed bias; gain-matched rewiring 15/15 but always
+  answering right with no left events; the within-hemisphere control with
+  the measured pools crosses the gate twice, with its own screened pools
+  (`READOUT_MAPS["pool_ipsi0"]`) 17/17. Kills do not separate any of them
+  (1.9-2.7 per episode against 2.7). Structurally, each measured steer pool
+  gets its two-hop visual input from its own eye at about 100:1; every
+  rewiring is balanced. Write-up: `docs/research/wiring-controls-2026-09-18.md`.
+- Found that Battlezone ignores the gym seed (identical frames for seeds 0
+  and 1), so the 2026-09-14 ten-seed benchmarks were ten replicas of one
+  episode per deterministic pilot. `bench_pilots.py` now resets the brain
+  and opens each episode with a seeded burst of 15-60 random ticks. A first
+  rerun with replicas had made one rewiring look right 27/32; with
+  independent episodes it is 11/29.
+
 ## [2026-09-14] - Learning results: readouts learn to survive, not to kill; the mushroom body cannot see
 
 - PPO readouts (410k ticks each): kills flat at about one per episode for

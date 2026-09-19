@@ -26,6 +26,16 @@ DATA = Path(__file__).resolve().parents[2] / "data"
 SHIU = DATA / "shiu_model"
 ANNOTATIONS_TSV = (DATA / "flywire_annotations" / "supplemental_files"
                    / "Supplemental_file1_neuron_annotations.tsv")
+# dataset version -> (index csv, signed connectivity parquet, annotation tsv).
+# "783" is FlyWire v783 in Shiu et al.'s files with the flyconnectome
+# annotations; "malecns" is MaleCNS v1.0 converted by scripts/build_malecns.py
+# into the same three shapes (see data/malecns/cache/manifest.json).
+DATASETS = {
+    "783": (SHIU / "Completeness_783.csv", SHIU / "Connectivity_783.parquet", ANNOTATIONS_TSV),
+    "malecns": (DATA / "malecns" / "cache" / "Completeness_malecns.csv",
+                DATA / "malecns" / "cache" / "Connectivity_malecns.parquet",
+                DATA / "malecns" / "cache" / "annotations_malecns.tsv"),
+}
 
 DT = 1e-4          # s (Brian2 default clock)
 V_REST = -52.0     # mV
@@ -41,18 +51,26 @@ POISSON_KICK = W_SYN * 250  # 68.75 mV, forces a spike
 REFR_STEPS = round(T_RFC / DT)   # 22
 DELAY_STEPS = round(T_DLY / DT)  # 18
 
-_annotations_cache: pd.DataFrame | None = None
+_annotations_cache: dict[str, pd.DataFrame] = {}
 
 
-def annotations() -> pd.DataFrame:
-    global _annotations_cache
-    if _annotations_cache is None:
-        _annotations_cache = pd.read_csv(ANNOTATIONS_TSV, sep="\t",
-                                         low_memory=False)
-    return _annotations_cache
+def annotations(version: str = "783") -> pd.DataFrame:
+    """The neuron annotation table of a dataset: root_id, cell_type, side,
+    super_class, pos_x/y/z, top_nt, known_nt (FlyWire vocabulary)."""
+    if version not in _annotations_cache:
+        if version not in DATASETS:
+            raise ValueError(f"unknown dataset version {version!r}; known: {list(DATASETS)}")
+        df = pd.read_csv(DATASETS[version][2], sep="\t", low_memory=False)
+        # pandas 3 keeps missing strings missing through astype(str); the
+        # code compares and sorts these columns, so make them plain strings
+        for col in ("cell_type", "side", "super_class", "top_nt", "known_nt"):
+            if col in df:
+                df[col] = df[col].fillna("").astype(str)
+        _annotations_cache[version] = df
+    return _annotations_cache[version]
 
 
-ABLATIONS = ("none", "rewired", "silenced")
+ABLATIONS = ("none", "rewired", "rewired_ipsi", "silenced")
 SENSORY_MODES = ("free", "external_only")
 SENSORY_CLASSES = ("sensory", "sensory_ascending")
 SIGN_MODES = ("predicted", "known_first")
@@ -62,11 +80,12 @@ NT_EXCITATORY = ("acetylcholine",)
 NT_AMINERGIC = ("dopamine", "octopamine", "serotonin")
 
 
-def transmitter_per_cell(root_ids: np.ndarray, prefer_known: bool) -> np.ndarray:
+def transmitter_per_cell(root_ids: np.ndarray, prefer_known: bool,
+                         version: str = "783") -> np.ndarray:
     """One transmitter label per cell: the literature-known one (first token
     of `known_nt`) when prefer_known and it is one of the seven classes,
     else the FlyWire prediction `top_nt`."""
-    ann = annotations().drop_duplicates("root_id").set_index("root_id").reindex(root_ids)
+    ann = annotations(version).drop_duplicates("root_id").set_index("root_id").reindex(root_ids)
     top = ann["top_nt"].astype(str).str.lower().to_numpy()
     if not prefer_known:
         return top
@@ -80,11 +99,15 @@ class ShiuBrain:
     def __init__(self, version: str = "783", seed: int = 0,
                  ablate: str = "none", ablate_seed: int = 0,
                  sensory_input: str = "free", signs: str = "predicted",
-                 aminergic: str = "excitatory"):
+                 aminergic: str = "excitatory", weight_scale: float = 1.0):
         """ablate: "none" is the measured wiring; "rewired" permutes every
         edge's postsynaptic target with a seeded RNG (each presynaptic cell
         keeps its out-degree, synapse counts and transmitter sign, the
-        topology is destroyed); "silenced" zeroes all weights. Controls for
+        topology is destroyed); "rewired_ipsi" permutes targets only among
+        cells on the same side of the brain (annotation `side`), so gross
+        laterality survives and only the within-hemisphere circuit is
+        destroyed: the stricter control, since a whole-brain shuffle loses
+        left/right trivially; "silenced" zeroes all weights. Controls for
         any claim that the wiring matters.
 
         sensory_input: "free" is the reference model, where primary sensory
@@ -105,27 +128,38 @@ class ShiuBrain:
         serotonin as fast +1 synapses); "zero" removes their fast weight —
         they are slow modulators, and as +1 synapses the ~300 PAM dopamine
         cells close a Kenyon-cell -> PAM -> Kenyon-cell loop that sustains
-        the persistent state above. Every option is recorded in `meta`."""
+        the persistent state above.
+
+        weight_scale multiplies every synaptic weight after the options above
+        (1.0 is the model). Its purpose is a gain-matched control: a rewired
+        graph can sit in a different firing regime from the intact one, and
+        behaviour must be compared at matched activity before the topology
+        is blamed. Every option is recorded in `meta`."""
         if ablate not in ABLATIONS:
             raise ValueError(f"ablate must be one of {ABLATIONS}")
         if sensory_input not in SENSORY_MODES:
             raise ValueError(f"sensory_input must be one of {SENSORY_MODES}")
         if signs not in SIGN_MODES or aminergic not in AMINERGIC_MODES:
             raise ValueError("bad signs/aminergic option")
+        if version not in DATASETS:
+            raise ValueError(f"unknown dataset version {version!r}; known: {list(DATASETS)}")
+        self.version = version
         self.ablate = ablate
         self.ablate_seed = ablate_seed
         self.sensory_input = sensory_input
         self.signs = signs
         self.aminergic = aminergic
+        self.weight_scale = float(weight_scale)
         self.meta = {"version": version, "ablate": ablate, "ablate_seed": ablate_seed,
                      "sensory_input": sensory_input, "signs": signs,
-                     "aminergic": aminergic}
-        comp = pd.read_csv(SHIU / f"Completeness_{version}.csv")
+                     "aminergic": aminergic, "weight_scale": self.weight_scale}
+        index_csv, connectivity_parquet, _ = DATASETS[version]
+        comp = pd.read_csv(index_csv)
         self.root_ids = comp.iloc[:, 0].to_numpy(dtype=np.int64)
         self.n = len(self.root_ids)
         self.index_of = {int(r): i for i, r in enumerate(self.root_ids)}
         con = pd.read_parquet(
-            SHIU / f"Connectivity_{version}.parquet",
+            connectivity_parquet,
             columns=["Presynaptic_Index", "Postsynaptic_Index",
                      "Excitatory x Connectivity"])
         w = (con["Excitatory x Connectivity"].to_numpy(np.float32) * W_SYN)
@@ -134,7 +168,7 @@ class ShiuBrain:
         if signs == "known_first" or aminergic == "zero":
             # literature transmitter first: the FlyWire prediction calls every
             # Kenyon cell dopaminergic, and they are cholinergic
-            nt = transmitter_per_cell(self.root_ids, prefer_known=True)
+            nt = transmitter_per_cell(self.root_ids, prefer_known=True, version=version)
             counts = np.abs(w)
             if signs == "known_first":
                 sign = np.where(np.isin(nt, NT_INHIBITORY), -1.0,
@@ -148,14 +182,26 @@ class ShiuBrain:
                 self.meta["aminergic_edges_zeroed"] = int(am.sum())
         if ablate == "rewired":
             post = np.random.default_rng(ablate_seed).permutation(post)
+        elif ablate == "rewired_ipsi":
+            ann = annotations(version).drop_duplicates("root_id").set_index("root_id")
+            side_of = ann["side"].reindex(self.root_ids).fillna("na").astype(str).to_numpy()
+            rng = np.random.default_rng(ablate_seed)
+            post = post.copy()
+            for s_label in np.unique(side_of):
+                m = np.flatnonzero(side_of[post] == s_label)
+                post[m] = post[rng.permutation(m)]
+            self.meta["rewired_groups"] = {str(k): int(v) for k, v in
+                                           zip(*np.unique(side_of, return_counts=True))}
         elif ablate == "silenced":
             w = np.zeros_like(w)
         if sensory_input == "external_only":
-            ann = annotations().drop_duplicates("root_id").set_index("root_id")
+            ann = annotations(version).drop_duplicates("root_id").set_index("root_id")
             sclass = ann["super_class"].reindex(self.root_ids).astype(str).to_numpy()
             sensory = np.isin(sclass, SENSORY_CLASSES)
             self.n_sensory_deafferented = int(sensory.sum())
             w = np.where(sensory[post], 0.0, w).astype(np.float32)
+        if self.weight_scale != 1.0:
+            w = (w * np.float32(self.weight_scale)).astype(np.float32)
         self.W = sparse.csc_matrix((w, (post, pre)), shape=(self.n, self.n))
         self._decay_m = np.float32(np.exp(-DT / T_MBR))
         self._decay_s = np.float32(np.exp(-DT / TAU_SYN))
@@ -164,6 +210,10 @@ class ShiuBrain:
         self.reset()
 
     # -- neuron lookup -----------------------------------------------------
+
+    def annotations(self) -> pd.DataFrame:
+        """This dataset's annotation table (FlyWire vocabulary)."""
+        return annotations(self.version)
 
     def indices_of(self, root_ids) -> tuple[np.ndarray, list[int]]:
         """(present indices, missing root ids)."""
@@ -175,7 +225,7 @@ class ShiuBrain:
 
     def indices_for_type(self, cell_type: str, side: str | None = None
                          ) -> np.ndarray:
-        df = annotations()
+        df = self.annotations()
         rows = df[df["cell_type"] == cell_type]
         if side is not None:
             rows = rows[rows["side"] == side]

@@ -14,13 +14,29 @@ footer is a named, measured mapping.*
 **The complete FlyWire v783 female fruit-fly brain, 138,639 neurons and 15.1
 million synapses, spiking on a CUDA backend at five times real time, pilots
 an Atari Battlezone tank through its own eyes and its own descending
-neurons.** Not the Google/Janelia male map; that loader is planned.
+neurons.** The Google/Janelia male map (MaleCNS v1.0, 166,700 neurons with
+the ventral nerve cord) loads through the same code with `--dataset malecns`
+and is used as a second individual for the controls; the pilot itself still
+runs on FlyWire.
 
 **Status, honestly: it fires at tanks that come into view, backs off from
 loom, turns toward targets, and scores about one kill per 30 seconds. A
-degree-preserving random rewiring of the same brain scores the same. A
-trained readout on top of it learns to survive but not to kill. The wiring
-is not yet shown to matter.**
+degree-preserving random rewiring of the same brain scores the same number
+of kills, but it cannot tell which side a target is on: the measured wiring
+steers toward the target on 62 of 63 gated look ticks over ten 100 s
+episodes, five whole-brain rewirings on 66 of 165. A rewiring confined to
+each hemisphere keeps the side by anatomy, but not the rest: the measured
+wiring delivers vision to 58 of 460 descending types where the shuffles
+light about 355, at up to 47 Hz where they reach 14, and 14 of its types
+tell an expanding object from a contracting one where the shuffles have at
+most two. The male brain (MaleCNS v1.0, now loadable) replicates this at
+matched gain with the same cells. The model cannot compute motion direction
+at T4 (a point-neuron limit, measured); given direction there by an
+engineered correlator, the wiring builds the fly's horizontal and vertical
+motion systems (HS cells 113 Hz one way, 0 the other; VS cells likewise)
+and ten direction-selective descending neurons including DNa02, in both
+flies, where the shuffle builds none. A trained readout on top of it learns
+to survive but not to kill.**
 
 The brain runs as a leaky integrate-and-fire network over the measured
 wiring and is seated as the **pilot** inside a retro-futuristic 3D cockpit.
@@ -44,8 +60,10 @@ controls drive the game. Fly → cockpit → tank → robot war.
   Levers are a kinematic puppet.
 - **Not claimed:** that the fly learns (the two learning experiments and
   their controls are in `docs/research/learning-2026-09-14.md`), that the
-  wiring beats a random graph on this task, that the mushroom body is in the
-  loop, or anything about consciousness. Every video is closed-loop unless
+  wiring beats a random graph on kills (it does not), that the
+  within-hemisphere circuit matters beyond keeping the two sides apart
+  (`docs/research/wiring-controls-2026-09-18.md`), that the mushroom body
+  is in the loop, or anything about consciousness. Every video is closed-loop unless
   its footer says otherwise; there is no replay footage in this repository.
 - **No token, no coin, ever.**
 
@@ -78,6 +96,46 @@ turns toward off-axis targets, and scores about one kill per 30 s episode;
 so does a degree-preserving random rewiring of the same brain. Details and
 the honest benchmark: `docs/research/cascade-probe-2026-09-14.md`.
 
+On 2026-09-18 the wiring question was measured directly
+(`docs/research/wiring-controls-2026-09-18.md`). A DN screen on the same
+stimuli shows the measured graph delivering the side of a small object to
+four descending types at LI above 0.8, and three independent whole-brain
+rewirings delivering none (pool LI +0.03, -0.11, +0.21), gain-matched or
+not. In the game, over ten independent 100 s episodes, the measured
+brain's steering sign matched the retina's side on 62 of 63 gated look
+ticks; five rewirings scored 66 of 165, each at chance or below with its
+own fixed bias, while killing as often as the connectome. A new control
+that shuffles targets within each hemisphere (`--ablate rewired_ipsi`)
+keeps the side and, with its own screened pools, steers correctly too.
+Beyond laterality, `scripts/screen_selectivity.py` gives every brain the
+same battery (small disc, tank-sized disc, loom, receding disc, flash, bars)
+and finds three things the shuffles cannot inherit: the measured wiring
+routes vision to 58 descending types rather than about 355, drives a few of
+them hard (DNg100 at 47 Hz against 14 for the shuffles' best), and has 14
+types that prefer expansion to contraction, DNp12 among them, against at
+most two. Size tuning and direction selectivity are absent in every brain,
+a front-end limit. MaleCNS v1.0, converted by `scripts/build_malecns.py`,
+is over-excited at Shiu gains (11,000 spiking neurons per tick against
+2,000) and has a narrow window, as flybench also found; at weight scale 0.6
+it replicates the pattern with the same cells (DNg100, DNp12, DNp07). In
+the game with its own screened pools (`pool_male`) the male reverses on
+half its ticks, kills 1.2 and dies 2.7 times per 100 s against the
+female's 2.7 and 5.7, and steers toward the target 10 times in 12;
+`out/no-fly-zone-female-vs-male.mp4` is seed 0 of each, side by side.
+`scripts/probe_motion.py` then showed that no injection at the columnar
+inputs makes T4/T5 direction-selective in this LIF (v5 adds the slow Mi4
+and Mi9 channels; still flat), so injection map v6 computes direction with a
+Reichardt correlator at the retina and injects it at the T4 and T5
+subtypes, replacing that one stage. Downstream the wiring does the rest:
+HS cells at 93-116 Hz for one horizontal direction and 0-11 for the other,
+VS cells for one vertical direction and silent for the other, and ten
+descending types direction-selective at both sweep speeds (DNa02 among
+them, at 48 Hz), against flat HS/VS and no consistent descending type in
+the within-hemisphere shuffle; the male reproduces it with H2 opposite to
+HS as in the fly. The same day's audit found that Battlezone ignores the
+gym seed, so the earlier "ten-seed" benchmarks were replicas;
+`bench_pilots.py` now opens each episode with a seeded random warm-up.
+
 Two learning routes were then tried (`docs/research/learning-2026-09-14.md`):
 a PPO readout trained on the frozen brain's pooled spike counts learned to
 survive, from three deaths per minute to under one, but not to kill more than
@@ -92,8 +150,8 @@ mushroom body cannot see the game. Both are labelled as such wherever shown.
 | M1 game frame → CRT texture → eye camera | done | The orientation gate guards vertical flips only. |
 | M2 closed loop with the reflex stub | done | Levers are a kinematic puppet derived from the action, not causal. |
 | M2.5 flybody seated in the cockpit | done | Kinematic attach; eye cameras are world-fixed at head height; silent fallback to the bare cockpit. |
-| M3 whole-brain LIF core, validated | done | Gates are qualitative (MN9 > 5 Hz, any giant-fibre spike), single seed. CPU (SciPy) and CUDA (Triton) backends agree. |
-| M4 connectome pilots in wired mode, dashboard | partial | Idle scan now off by default and labelled when on; pooled readouts, saccadic gating and LI steering give event-driven play with real turns and kills; but the same-seed benchmark cannot yet separate the measured wiring from a rewired control; no eyes panel; mp4 compositor rather than a live view. |
+| M3 whole-brain LIF core, validated | done | Gates are qualitative (MN9 > 5 Hz, any giant-fibre spike), single seed. CPU (SciPy) and CUDA (Triton) backends agree. MaleCNS v1.0 loads through the same path (`--dataset malecns`); its giant-fibre gate passes, its sugar gate cannot be run (no labelled sugar GRNs), and it needs weights x0.6 to sit in FlyWire's firing regime. |
+| M4 connectome pilots in wired mode, dashboard | partial | Idle scan now off by default and labelled when on; pooled readouts, saccadic gating and LI steering give event-driven play with real turns and kills; the wiring is shown to carry target side to the descending neurons where a whole-brain rewiring does not, but a within-hemisphere rewiring also keeps it; no eyes panel; mp4 compositor rather than a live view. |
 | M5 cockpit art pass | partial | Neon, lighting, set dressing and decals done; the screen is a flat box showing the raw frame; the single damage lamp sits about 35° above the eye cameras' axis, so the retina never sees it. |
 | M6 embodied mode, contact-driven controls | not started | No `mj_step`, actuators or contact reads; no `--pilot` flag exists. |
 | M7 learning and showcase video | partial | Batched brain, PPO readout trainer, mushroom-body plasticity with LR-zero and shuffled controls all exist. Readouts learn survival, not kills; plasticity is bounded by a calyx that cannot see. No showcase cut. |
@@ -116,11 +174,28 @@ the female brain, so oviDN is read out under that name.
    from measured closed-loop distributions (the `pool4` spans are
    provisional), a `tests/` directory, and a provenance hash on every
    artefact.
-4. Show that the wiring matters, or find out that it does not: longer
-   episodes with off-axis targets, a balanced-success metric over left and
-   right targets, a gain-matched rewired control, and more seeds. Then a live
-   viewer with an eyes panel, and the eye-render settings fix.
-5. MaleCNS v1.0 loader, which also gives a real pIP10 and the VNC for M6.
+4. Done 2026-09-18: longer episodes, a balanced left/right steering
+   metric, a gain-matched rewired control, three rewiring seeds and a
+   within-hemisphere control (`docs/research/wiring-controls-2026-09-18.md`).
+   Result: the wiring keeps the target's side; the within-hemisphere circuit
+   is not yet shown to matter. Also done the same day: the selectivity
+   screen (specificity, gain and expansion selectivity separate the wiring
+   from a within-hemisphere shuffle; size tuning and direction selectivity
+   are absent everywhere). Then the motion probe and injection map v6
+   (direction from a correlator, injected at T4/T5, labelled engineered):
+   the wiring downstream builds HS/VS and direction-selective descending
+   neurons; with the right eye mirrored (v6m) yaw optic flow gives 14
+   descending types a direction-signed left/right difference (DNa02, DNp15,
+   DNg41, ...), and `READOUT_MAPS["yaw"]` pilots on five of them (kills
+   2.4, dies 4.3 per 100 s against pool4's 2.2 and 5.9). Still open: a
+   motion-signed steering metric to score it; size tuning, still absent
+   everywhere; a live viewer with an eyes panel; the eye-render settings
+   fix.
+5. Done 2026-09-18: MaleCNS v1.0 loader (`scripts/build_malecns.py`,
+   `--dataset malecns`), used as a second individual for the controls.
+   Still open: the male's own hex-column retinotopy in place of the PCA
+   heuristic (the male responds asymmetrically to it), male-screened
+   readout pools, a male pilot run, and the VNC for M6.
 6. Learning, continued: three to five training seeds per condition, a
    kill-shaped reward and longer training to test whether the connectome
    head's kept kill rate is real; a deliberate, labelled calyx-gain

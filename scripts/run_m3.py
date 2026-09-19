@@ -12,6 +12,9 @@ from pathlib import Path
 
 from noflyzone import dashboard
 from noflyzone.brain_backend import BACKENDS, describe, make_brain
+from noflyzone.brain_lif import ABLATIONS
+
+DATASET_LABELS = {"783": "FlyWire v783 (female)", "malecns": "MaleCNS v1.0 (male)"}
 from noflyzone.brain_connectome import BrainView, ConnectomeBrain
 from noflyzone.loop import PilotLoop
 
@@ -38,8 +41,13 @@ def main() -> None:
     ap.add_argument("--idle-scan", action="store_true",
                     help="scripted forward-right idle scan (off by default)")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--ablate", choices=["none", "rewired", "silenced"],
-                    default="none", help="wiring control")
+    ap.add_argument("--dataset", default="783", help="brain_lif.DATASETS key: 783 (FlyWire) or malecns")
+    ap.add_argument("--ablate", choices=list(ABLATIONS), default="none",
+                    help="wiring control: rewired (whole-brain target shuffle), "
+                         "rewired_ipsi (targets shuffled within each hemisphere), silenced")
+    ap.add_argument("--ablate-seed", type=int, default=0, help="RNG seed of the rewiring")
+    ap.add_argument("--weight-scale", type=float, default=1.0,
+                    help="multiply every synaptic weight (gain-matched controls)")
     ap.add_argument("--sensory", choices=["free", "external_only"], default="free",
                     help="external_only: primary sensory neurons fire only from injected input")
     ap.add_argument("--signs", choices=["predicted", "known_first"], default="predicted")
@@ -61,9 +69,12 @@ def main() -> None:
     loop = PilotLoop(seed=args.seed, retina_zoom=args.zoom,
                      retina_center=(0.5, 0.5), eye_offset=args.eye_offset)
     brain = ConnectomeBrain(retina=loop.retina,
-                            brain=make_brain(args.backend, ablate=args.ablate,
+                            brain=make_brain(args.backend, version=args.dataset,
+                                             ablate=args.ablate,
+                                             ablate_seed=args.ablate_seed,
                                              sensory_input=args.sensory,
-                                             signs=args.signs, aminergic=args.aminergic),
+                                             signs=args.signs, aminergic=args.aminergic,
+                                             weight_scale=args.weight_scale),
                             injection=args.injection, readout=args.readout)
     loop.brain = brain
     loop.controls = type(loop.controls)(
@@ -84,7 +95,10 @@ def main() -> None:
             + (f" | startle refractory {args.startle_refractory}"
                if args.startle_refractory else "")
             + (" | steer LI" if args.steer_mode == "li" else "")
-            + (f" | WIRING {args.ablate.upper()}" if args.ablate != "none" else "")
+            + (f" | WIRING {args.ablate.upper()}"
+               + (f" seed {args.ablate_seed}" if args.ablate_seed else "")
+               if args.ablate != "none" else "")
+            + (f" | weights x{args.weight_scale:g}" if args.weight_scale != 1.0 else "")
             + (f" | sensory {args.sensory}" if args.sensory != "free" else "")
             + (f" | signs {args.signs}" if args.signs != "predicted" else "")
             + (f" | aminergic {args.aminergic}" if args.aminergic != "excitatory" else ""))
@@ -126,8 +140,8 @@ def main() -> None:
                 loop.cockpit.render("beauty"), loop.game.frame, loop.controls,
                 state["dn"], loop.total_reward, i * loop.dt,
                 brain=view.render(brain.window_counts),
-                brain_label=f"138,639 neurons | {spiking:,} spiking",
-                footer=f"NO-FLY-ZONE // FlyWire v783 // {mode}"))
+                brain_label=f"{loop.brain.brain.n:,} neurons | {spiking:,} spiking",
+                footer=f"NO-FLY-ZONE // {DATASET_LABELS.get(args.dataset, args.dataset)} // {mode}"))
         if (i + 1) % 15 == 0:
             dn_str = "  ".join(f"{k} {v:5.1f}" for k, v in state["dn"].items())
             cascade = "  ".join(
@@ -163,8 +177,7 @@ def main() -> None:
               f"{sum(t['fire'] for t in trace)}; trace -> out/{args.trace}.json")
 
     # who was active in the final tick, by brain region class
-    from noflyzone.brain_lif import annotations
-    ann = annotations().set_index("root_id")
+    ann = loop.brain.brain.annotations().set_index("root_id")
     ann = ann[~ann.index.duplicated()]
     import pandas as pd
     classes = ann.reindex(loop.brain.brain.root_ids)["super_class"]
