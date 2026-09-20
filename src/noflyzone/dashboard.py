@@ -1,11 +1,13 @@
 """Presentation layout: fly-in-cockpit | game screen, controls strip below.
 
 compose() builds one video frame:
-  +----------------------+----------------------+
-  |  fly in the cockpit  |     the raw game     |
-  +----------------------+----------------------+
-  |  treads | DN rates | FIRE / startle / score |
-  +---------------------------------------------+
+  +----------------------+----------------------+----------------------+
+  |  fly in the cockpit  |     the raw game     |  connectome (spikes) |
+  +----------------------+----------------------+----------------------+
+  |  treads | DN rates | FIRE / startle / score |  eyes: L / R mosaics |
+  +---------------------------------------------+----------------------+
+The eyes panel (optional) is what the retinas actually sampled this tick,
+reconstructed as the two hex mosaics, with each eye's transient energy.
 """
 
 import numpy as np
@@ -44,10 +46,34 @@ def _bar_h(draw, x, y, w, h, frac, color, label, text):
     draw.text((x + w + 8, y - 2), f"{label} {text}", font=FONT, fill=FG)
 
 
+def eyes_panel(retina, retina_right, rgb: dict, prev_rgb: dict | None,
+               w: int = PANEL_W, h: int = STRIP_H) -> np.ndarray:
+    """The two retinal mosaics of this tick side by side, each with its
+    summed |delta luminance| against the previous tick (the transient the
+    brain is injected with) as a bar."""
+    panel = Image.new("RGB", (w, h), PANEL_BG)
+    draw = ImageDraw.Draw(panel)
+    half = w // 2
+    mh = h - 40
+    for i, (side, ret) in enumerate((("left", retina), ("right", retina_right))):
+        mosaic = ret.reconstruct(rgb[side])
+        ys, xs = np.nonzero(mosaic.any(axis=2))      # crop to the lattice's footprint
+        if ys.size:
+            mosaic = mosaic[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+        mw = int(mh * mosaic.shape[1] / mosaic.shape[0])
+        x0 = i * half + (half - mw) // 2
+        panel.paste(Image.fromarray(mosaic).resize((mw, mh), Image.NEAREST), (x0, 22))
+        lum = rgb[side][:, 0].astype(np.float32)
+        energy = float(np.abs(lum - prev_rgb[side][:, 0]).mean() / 255.0) if prev_rgb is not None else 0.0
+        draw.text((i * half + 10, 6), f"EYE {side[0].upper()}   {ret.n_ommatidia} ommatidia", font=FONT, fill=DIM)
+        _bar_h(draw, i * half + 10, h - 14, half - 130, 8, min(1.0, energy * 8), ACCENT, "transient", f"{energy:.3f}")
+    return np.asarray(panel)
+
+
 def compose(beauty: np.ndarray, game: np.ndarray, controls, rates: dict,
             score: float, t: float, brain: np.ndarray | None = None,
             brain_label: str = "",
-            footer: str = "NO-FLY-ZONE") -> np.ndarray:
+            footer: str = "NO-FLY-ZONE", eyes: np.ndarray | None = None) -> np.ndarray:
     n_panels = 3 if brain is not None else 2
     width = PANEL_W * n_panels
     canvas = Image.new("RGB", (width, PANEL_H + STRIP_H), BG)
@@ -100,6 +126,28 @@ def compose(beauty: np.ndarray, game: np.ndarray, controls, rates: dict,
     draw.text((x0 + 90, top + 70),
               f"throttle {controls.throttle:+.2f}", font=FONT, fill=FG)
     draw.text((x0 + 90, top + 88), f"t = {t:6.1f} s", font=FONT, fill=DIM)
-    draw.text((x0 + 90, top + 112), footer, font=FONT, fill=DIM)
+    # the footer wraps to two lines within the strip left of the eyes panel
+    max_w = (2 * PANEL_W if eyes is not None and n_panels == 3 else width) - (x0 + 90) - 10
+    for j, line in enumerate(_wrap(draw, footer, max_w, 2)):
+        draw.text((x0 + 90, top + 110 + j * 16), line, font=FONT, fill=DIM)
+    if eyes is not None and n_panels == 3:
+        canvas.paste(Image.fromarray(eyes).resize((PANEL_W, STRIP_H)), (2 * PANEL_W, top))
 
     return np.asarray(canvas)
+
+
+def _wrap(draw, text: str, max_w: int, max_lines: int) -> list[str]:
+    words, lines, cur = text.split(" "), [], ""
+    for w in words:
+        trial = (cur + " " + w).strip()
+        if draw.textlength(trial, font=FONT) <= max_w or not cur:
+            cur = trial
+        else:
+            lines.append(cur); cur = w
+    lines.append(cur)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        while lines[-1] and draw.textlength(lines[-1] + " ...", font=FONT) > max_w:
+            lines[-1] = lines[-1][:-1]
+        lines[-1] = lines[-1].rstrip() + " ..."
+    return lines

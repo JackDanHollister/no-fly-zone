@@ -2,6 +2,13 @@
 
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
+- Eyes panel on the dashboard (`dashboard.eyes_panel`): the two retinal
+  mosaics as sampled this tick, cropped to the lattice, with each eye's
+  transient energy; the footer wraps beside it. `run_m3.py --live` opens
+  a tkinter window (`liveview.py`, standard library only) on the dashboard
+  while the fly plays, dropping display frames rather than brain ticks;
+  `--no-eyes` leaves the panel off.
+
 - `bench_pilots.py`: a motion-signed steering metric (retinal Reichardt
   correlator over ON/OFF transients, both eyes; steer sign against motion
   sign on gated look ticks, with a centroid convention check) and

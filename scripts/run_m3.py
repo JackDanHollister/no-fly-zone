@@ -72,6 +72,10 @@ def main() -> None:
     ap.add_argument("--learn-eta", type=float, default=2e-5)
     ap.add_argument("--learn-seed", type=int, default=0, help="seed of a shuffled edge set")
     ap.add_argument("--video-name", default="m3_demo", help="out/<name>.mp4 with --video")
+    ap.add_argument("--live", action="store_true",
+                    help="open a window showing the dashboard as the fly plays (tkinter; needs a display); "
+                         "close it or press q to stop")
+    ap.add_argument("--no-eyes", action="store_true", help="leave the eyes panel off the dashboard")
     args = ap.parse_args()
     calibration = args.calibration or args.readout
 
@@ -145,6 +149,10 @@ def main() -> None:
     diag = {t: brain.brain.indices_for_type(t) for t in diag_types}
     print(f"ready in {time.time() - t0:.0f} s | {brain.describe()}")
 
+    live = None
+    if args.live:
+        from noflyzone.liveview import LiveView
+        live = LiveView(title="NO-FLY-ZONE")
     writer = None
     if args.video:
         import imageio.v2 as imageio
@@ -158,6 +166,7 @@ def main() -> None:
     names = loop.game.action_meanings
     peak_spiking = 0
     learn_label = ""
+    prev_rgb = None
     for i in range(args.steps):
         if plast is not None:
             for name, hz in plast.teaching_rates().items():
@@ -182,13 +191,22 @@ def main() -> None:
                       "spiking": spiking,
                       "retina_lr": float(state["drives"]["right"][:, 0].mean()
                                          - state["drives"]["left"][:, 0].mean())})
-        if writer is not None:
-            writer.append_data(dashboard.compose(
+        if writer is not None or live is not None:
+            eyes = None if args.no_eyes else dashboard.eyes_panel(
+                loop.retina, loop.retina_right, state["rgb"], prev_rgb)
+            frame_img = dashboard.compose(
                 loop.cockpit.render("beauty"), loop.game.frame, loop.controls,
                 state["dn"], loop.total_reward, i * loop.dt,
                 brain=view.render(brain.window_counts),
                 brain_label=f"{loop.brain.brain.n:,} neurons | {spiking:,} spiking",
-                footer=f"NO-FLY-ZONE // {DATASET_LABELS.get(args.dataset, args.dataset)} // {mode}{learn_label}"))
+                footer=f"NO-FLY-ZONE // {DATASET_LABELS.get(args.dataset, args.dataset)} // {mode}{learn_label}",
+                eyes=eyes)
+            if writer is not None:
+                writer.append_data(frame_img)
+            if live is not None and not live.show(frame_img):
+                print("live view closed", flush=True)
+                break
+        prev_rgb = state["rgb"]
         if (i + 1) % 15 == 0:
             dn_str = "  ".join(f"{k} {v:5.1f}" for k, v in state["dn"].items())
             cascade = "  ".join(
@@ -199,6 +217,8 @@ def main() -> None:
             print(f"        cascade Hz: {cascade}", flush=True)
 
     wall = time.time() - t0
+    if live is not None:
+        live.close()
     if writer is not None:
         writer.close()
         print(f"video: {OUT / f'{args.video_name}.mp4'}")
