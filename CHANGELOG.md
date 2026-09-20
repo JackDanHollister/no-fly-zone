@@ -2,6 +2,23 @@
 
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
+- The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).
+  Cause of the male's one-sidedness found: 13 of its 3,377 R1-6
+  photoreceptors have a soma position, so the luminance channel reached
+  13 cells, 4 left and 9 right. `ConnectomeBrain` now places a MaleCNS
+  cell by its annotated hex column (lattice oriented to the soma-PCA
+  frame by an orthogonal fit) and gives a cell without one the
+  synapse-weighted majority column of its same-side partners
+  (`inherit_hex`); all 16,095 injected male cells are placed, 8,232 by
+  inheritance; FlyWire unchanged; `retinotopy="pca"` is the control. The
+  screen's right-over-left drive ratio falls 7.2 to 2.05 (the remainder is
+  the annotation's 2:1 photoreceptor count); the male pilot kills 2.2 and
+  dies 2.3 per 100 s (was 1.2 / 2.7) and steers toward the target on
+  0.90 of gated looks, both sides (was 0.70, one side). The selectivity
+  screen re-run under it: the male has 12 expansion-selective descending
+  types against 1-4 in the shuffles (5 against 0 before), 6 loom-selective
+  against none, 85 responsive against 343-426; the replication sharpens.
+
 - `noflyzone/provenance.py`: every JSON, `.npz` and `.pt` artefact now
   carries the commit and dirty flag, time and host, package versions, the
   script's arguments, the brain's metadata, and a 12-hex id hashed from

@@ -119,11 +119,23 @@ most two. Size tuning and direction selectivity are absent in every brain,
 a front-end limit. MaleCNS v1.0, converted by `scripts/build_malecns.py`,
 is over-excited at Shiu gains (11,000 spiking neurons per tick against
 2,000) and has a narrow window, as flybench also found; at weight scale 0.6
-it replicates the pattern with the same cells (DNg100, DNp12, DNp07). In
+it replicates the pattern with the same cells (DNg100, DNp12, DNp07; under
+the column placement of 2026-09-20, 12 expansion-selective descending
+types against 1-4 in the shuffles). In
 the game with its own screened pools (`pool_male`) the male reverses on
 half its ticks, kills 1.2 and dies 2.7 times per 100 s against the
 female's 2.7 and 5.7, and steers toward the target 10 times in 12;
 `out/no-fly-zone-female-vs-male.mp4` is seed 0 of each, side by side.
+Those male numbers were measured with its cells placed on the retina by
+soma position, and on 2026-09-20 that turned out to be the reason the
+male favoured one side: its photoreceptors have no soma positions (13 of
+3,377 do), so the luminance channel reached 13 cells. Cells are now
+placed by their annotated hex column, and a cell without one takes the
+column of its synaptic partners (`docs/research/male-retinotopy-2026-09-20.md`).
+The male's right-over-left drive asymmetry falls from 7.2 to 2.05 (the
+rest is the annotation's 2:1 photoreceptor count), and the male pilot
+kills 2.2 and dies 2.3 per 100 s, steering toward the target on 0.90 of
+gated looks on both sides.
 `scripts/probe_motion.py` then showed that no injection at the columnar
 inputs makes T4/T5 direction-selective in this LIF (v5 adds the slow Mi4
 and Mi9 channels; still flat), so injection map v6 computes direction with a
@@ -225,9 +237,13 @@ the female brain, so oviDN is read out under that name.
    fix.
 5. Done 2026-09-18: MaleCNS v1.0 loader (`scripts/build_malecns.py`,
    `--dataset malecns`), used as a second individual for the controls.
-   Still open: the male's own hex-column retinotopy in place of the PCA
-   heuristic (the male responds asymmetrically to it), male-screened
-   readout pools, a male pilot run, and the VNC for M6.
+   Done 2026-09-20: the male's own hex-column retinotopy, columns
+   inherited from partners for the cells without one (the photoreceptors
+   above all), which removes most of the male's one-sidedness. Still
+   open: a per-side normalisation of the photoreceptor drive if the
+   annotation's 2:1 count is to be undone (an engineered step, so stated),
+   male-screened readout pools re-done under the new placement, and the
+   VNC for M6.
 6. Learning, continued. Done 2026-09-19: the three-factor rule on the
    descending neurons' inputs, with controls and a frozen test (it learns,
    and what it learns is harmful; see Status), and the PPO readout at
