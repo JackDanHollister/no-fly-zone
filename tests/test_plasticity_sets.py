@@ -61,3 +61,25 @@ def test_relative_rule_is_bounded_and_signed():
     assert np.all(ratio[coactive & live] > 1.0)       # rewarded co-active edges strengthened
     assert np.all(ratio[~coactive] == 1.0)            # nothing else touched
     assert live.sum() > 0.9 * live.size
+
+
+@pytest.mark.data
+@pytest.mark.cuda
+def test_latched_eligibility_credits_what_preceded_the_event():
+    brain = make_brain("cuda", aminergic="zero", sensory_input="external_only")
+    pl = MBPlasticity(brain, dt=1 / 15, edge_set="vis_dn", eta=1.0, latch=True)
+    quiet = np.zeros((1, brain.n), np.int32)
+    before = quiet.copy(); before[:, pl.pre[:50]] = 5; before[:, pl.post[:50]] = 5      # active before the hit
+    after = quiet.copy(); after[:, pl.pre[50:100]] = 5; after[:, pl.post[50:100]] = 5    # the response to the flash
+    pl.da_mean = 1000.0                          # every tick reads as punishment
+    pl.step(before, kills=np.array([0]), hits=np.array([0]))      # tick before the event: eligibility forms
+    pl.step(after, kills=np.array([0]), hits=np.array([1]))       # the hit: the brain now sees the flash
+    for _ in range(3):
+        pl.step(after, kills=np.array([0]), hits=np.array([0]))   # the pulse continues over the flash response
+    ratio = np.where(pl.w0 != 0, pl.mag / np.where(pl.w0 != 0, np.abs(pl.w0), 1.0), 1.0)
+    active_before = np.zeros(brain.n, bool); active_before[pl.pre[:50]] = True; active_before[pl.post[:50]] = True
+    active_after = np.zeros(brain.n, bool); active_after[pl.pre[50:100]] = True; active_after[pl.post[50:100]] = True
+    co_before = active_before[pl.pre] & active_before[pl.post] & (pl.w0 != 0)
+    co_after_only = active_after[pl.pre] & active_after[pl.post] & ~co_before & (pl.w0 != 0)
+    assert (ratio[co_before] < 1.0).all()        # what preceded the hit is punished
+    assert (ratio[co_after_only] == 1.0).all()   # the response to the flash is untouched

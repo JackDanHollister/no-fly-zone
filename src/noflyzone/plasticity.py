@@ -65,7 +65,7 @@ class MBPlasticity:
                  pulse_ticks: int = 6, da_tau_s: float = 20.0, rule: str = "on",
                  edge_set: str = "kc_mbon", seed: int = 0,
                  eligibility: str | None = None, scale: str | None = None,
-                 elig_cap: float | None = None):
+                 elig_cap: float | None = None, latch: bool = False):
         assert rule in RULES and edge_set in EDGE_SETS
         if edge_set == "shuffled":
             edge_set = "kc_mbon_shuffled"
@@ -87,6 +87,15 @@ class MBPlasticity:
         if elig_cap is None:
             elig_cap = np.inf if scale == "absolute" else 50.0
         self.elig_cap = float(elig_cap)
+        # latch (2026-09-20): a reinforcer's pulse lasts several ticks, during
+        # which the brain is responding to the event's own consequence (the
+        # screen flash of a hit, the explosion of a kill); with latch the
+        # dopamine acts on the eligibility as it stood the tick before the
+        # event, so what is credited is what preceded the outcome, not the
+        # response to it
+        self.latch = bool(latch)
+        self._elig_prev = None
+        self._elig_latched = None
         self.lo, self.hi = bounds
         self.teaching_hz, self.pulse_ticks = teaching_hz, pulse_ticks
         self._trace_decay = float(np.exp(-dt / tau_trace_s))
@@ -157,7 +166,19 @@ class MBPlasticity:
             elig = elig * self.trace_post[self.post]
         if np.isfinite(self.elig_cap):
             elig = np.minimum(elig, self.elig_cap)
-        dw = self.eta * elig * da_c
+        if self.latch:
+            event = bool(np.any(kills)) or bool(np.any(hits))
+            if event and self._elig_prev is not None:
+                self._elig_latched = self._elig_prev.copy()
+            if self._elig_latched is not None and (self.pulse["pam"] > 0 or self.pulse["ppl1"] > 0 or event):
+                elig_used = self._elig_latched
+            else:
+                elig_used = elig
+                self._elig_latched = None
+            self._elig_prev = elig
+        else:
+            elig_used = elig
+        dw = self.eta * elig_used * da_c
         if self.scale == "relative":
             dw = dw * np.abs(self.w0)
         if self.rule == "on" and da_c != 0.0:
@@ -174,7 +195,7 @@ class MBPlasticity:
                 self.pulse[k] = self.pulse_ticks
         drift = float(np.mean(np.abs(self.mag - np.abs(self.w0)) / np.maximum(np.abs(self.w0), 1e-6)))
         return {"pam_hz": pam_hz, "ppl1_hz": ppl1_hz, "da": da, "da_centred": da_c,
-                "elig_mean": float(elig.mean()), "drift": drift,
+                "elig_mean": float(elig_used.mean()), "drift": drift,
                 "frac_changed": float(np.mean(self.mag != np.abs(self.w0)))}
 
     def load_weights(self, path) -> None:
@@ -190,3 +211,4 @@ class MBPlasticity:
     def reset_traces(self) -> None:
         self.trace_pre[:] = 0; self.trace_post[:] = 0
         self.pulse = {"pam": 0, "ppl1": 0}
+        self._elig_prev = None; self._elig_latched = None

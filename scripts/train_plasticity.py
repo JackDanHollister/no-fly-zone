@@ -58,11 +58,18 @@ def main() -> None:
     ap.add_argument("--teaching", choices=["both", "kills", "hits"], default="both",
                     help="which game events teach: kills pulse PAM, hits pulse PPL1, or only one of them")
     ap.add_argument("--dopamine", choices=["events", "rpe"], default="events")
+    ap.add_argument("--latch", action="store_true",
+                    help="apply a reinforcer's pulse to the eligibility as it stood the tick before the "
+                         "event, not to the brain's response to the event's own flash (2026-09-20)")
     ap.add_argument("--critic-lr", type=float, default=0.5,
                     help="normalised-LMS TD(0) step: a hit moves the prediction of its state by this "
                          "fraction of the error (1e-3 unnormalised left the critic at zero, 2026-09-20)")
     ap.add_argument("--gamma", type=float, default=0.97)
     ap.add_argument("--rpe-hz", type=float, default=100.0, help="teaching rate at |RPE| = one running RMS")
+    ap.add_argument("--critic", choices=["population", "structured"], default="structured",
+                    help="population: 907 pooled features; structured: the readout pools' own rates "
+                         "(loom, steer L/R, drive) and their 1 s low-passes, the fly's own loom detectors "
+                         "as the predictor of the hit (2026-09-20)")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--episodes", type=int, default=20, help="per fly")
     ap.add_argument("--episode-ticks", type=int, default=900)
@@ -90,7 +97,8 @@ def main() -> None:
     plast = MBPlasticity(squad.brain, dt=squad.dt, eta=args.eta, rule=args.rule,
                          edge_set=args.edge_set,
                          seed=args.seed if args.edge_seed is None else args.edge_seed,
-                         eligibility=args.eligibility, scale=args.scale, elig_cap=args.elig_cap)
+                         eligibility=args.eligibility, scale=args.scale, elig_cap=args.elig_cap,
+                         latch=args.latch)
     if args.init_weights:
         plast.load_weights(args.init_weights)
         print(f"loaded weights from {args.init_weights}", flush=True)
@@ -104,8 +112,17 @@ def main() -> None:
     obs = squad.reset()
     # the critic: V(x) = w . x over the squad's pooled features, standardised
     # by a running mean and variance, TD(0)
-    critic_w = np.zeros(squad.n_features + 1, np.float64)
-    feat_mean = np.zeros(squad.n_features); feat_var = np.ones(squad.n_features); feat_n = 1e-3
+    def structured_obs(lp_state):
+        """Per fly: the readout pools' rates this tick and their 1 s low-passes."""
+        keys = ("DNp01", "DNa02_L", "DNa02_R", "DNg100", "pIP10")
+        raw = np.array([[squad.last_dn[i].get(k, 0.0) for k in keys] for i in range(args.batch)])
+        a = 1.0 - np.exp(-squad.dt / 1.0)
+        lp_state[:] = lp_state + a * (raw - lp_state)
+        return np.c_[np.log1p(raw), np.log1p(lp_state)]
+    lp_state = np.zeros((args.batch, 5))
+    n_crit = squad.n_features if args.critic == "population" else 10
+    critic_w = np.zeros(n_crit + 1, np.float64)
+    feat_mean = np.zeros(n_crit); feat_var = np.ones(n_crit); feat_n = 1e-3
     def standardise(o):
         nonlocal feat_mean, feat_var, feat_n
         bm, bv, bc = o.mean(0), o.var(0), o.shape[0]
@@ -115,7 +132,7 @@ def main() -> None:
         feat_n = tot
         return np.c_[(o - feat_mean) / np.sqrt(feat_var + 1e-6), np.ones(o.shape[0])]
     rpe_rms = 0.1        # the reward scale; adapts with a 1,000-tick memory
-    x_prev = standardise(obs)
+    x_prev = standardise(obs if args.critic == "population" else structured_obs(lp_state))
     rpe_log = []
     hit_rpe = []         # (global tick, mean delta at flies that were hit): does the critic learn to expect them?
     done_eps = 0; ep_index = np.zeros(args.batch, int)
@@ -138,7 +155,7 @@ def main() -> None:
             # one critic for the squad (shared weights, pooled experience), one
             # prediction error per fly; the teaching rate for the next tick is
             # the squad's mean error in units of its running RMS
-            x = standardise(obs)
+            x = standardise(obs if args.critic == "population" else structured_obs(lp_state))
             r = kills.astype(float) - 0.5 * hits.astype(float)
             v_prev = x_prev @ critic_w; v_next = np.where(done, 0.0, x @ critic_w)
             delta = r + args.gamma * v_next - v_prev
