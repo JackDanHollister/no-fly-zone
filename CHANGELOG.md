@@ -2,6 +2,20 @@
 
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
+- M6 embodied mode, baseline (`Cockpit(physics=True)`, `PilotLoop(pilot=
+  "embodied")`, `run_m3.py --pilot embodied`, `docs/architecture.md`
+  "Embodied mode"). The scene steps with the flybody's option block; the
+  tethered fly's T1 leg servos take inverse-kinematics targets from the
+  descending neurons' intent, its claws adhere, and fly-scale physical
+  levers move by contact; the action reads the levers' measured angles
+  (`controls.measured`), zeroed at rest and normalised by the 0.08 rad a
+  fly's push achieves. Found on the way: the fly's self-collision makes a
+  welded fly chatter (off, claws excepted); the levers were jammed in the
+  deck and a thousand times too heavy; the claws sat inside the knobs;
+  MuJoCo 3.13 drops the claw contacts when the lever flags are in the XML.
+  Gate `scripts/validate_embodied.py` passes; physics 32 ms per tick;
+  tests for the measured-lever action path and the seated fly.
+
 - The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).
   Cause of the male's one-sidedness found: 13 of its 3,377 R1-6
   photoreceptors have a soma position, so the luminance channel reached

@@ -77,13 +77,16 @@ def main() -> None:
                     help="open a window showing the dashboard as the fly plays (tkinter; needs a display); "
                          "close it or press q to stop")
     ap.add_argument("--no-eyes", action="store_true", help="leave the eyes panel off the dashboard")
+    ap.add_argument("--pilot", choices=["wired", "embodied"], default="wired",
+                    help="wired: descending rates set the levers directly; embodied: they drive the "
+                         "forelegs, the physical levers move by contact, the action reads the levers")
     args = ap.parse_args()
     calibration = args.calibration or args.readout
 
     print("building loop + connectome brain...", flush=True)
     t0 = time.time()
     loop = PilotLoop(seed=args.seed, retina_zoom=args.zoom,
-                     retina_center=(0.5, 0.5), eye_offset=args.eye_offset)
+                     retina_center=(0.5, 0.5), eye_offset=args.eye_offset, pilot=args.pilot)
     core = make_brain(args.backend, version=args.dataset,
                       ablate=args.ablate, ablate_seed=args.ablate_seed,
                       sensory_input=args.sensory, signs=args.signs,
@@ -143,7 +146,9 @@ def main() -> None:
             + (f" | sensory {args.sensory}" if args.sensory != "free" else "")
             + (f" | signs {args.signs}" if args.signs != "predicted" else "")
             + (f" | aminergic {args.aminergic}" if args.aminergic != "excitatory" else "")
-            + (f" | {learned}" if learned else ""))
+            + (f" | {learned}" if learned else "")
+            + (" | EMBODIED: forelegs push physical levers (IK targets, claw adhesion); action reads the levers"
+               if args.pilot == "embodied" else ""))
     g = git_state()
     if g["short"]:
         mode += f" | {g['short']}{'*' if g['dirty'] else ''}"   # the code that made this frame
@@ -187,6 +192,7 @@ def main() -> None:
         trace.append({"tick": i, "dn": state["dn"], "drive": dict(loop.controls.drive),
                       "suppressed": bool(loop.controls.suppressed),
                       "steer": loop.controls.steer, "throttle": loop.controls.throttle,
+                      "levers": list(loop.controls.measured) if loop.controls.measured else None,
                       "fire": bool(loop.controls.fire),
                       "action": names[loop.controls.to_action()],
                       "reward": float(state["reward"]),
@@ -235,6 +241,11 @@ def main() -> None:
     # a corrected brain is genuinely silent on a dark game-over screen, so
     # gate on the whole run, not the final tick
     assert peak_spiking > 0, "brain silent for the whole run — injection broken"
+    if args.pilot == "embodied":
+        lv = np.array([t["levers"] for t in trace if t["levers"] is not None])
+        print(f"embodied: levers reached left {lv[:, 0].min():+.2f}..{lv[:, 0].max():+.2f}, "
+              f"right {lv[:, 1].min():+.2f}..{lv[:, 1].max():+.2f} of the fly's push range; "
+              f"physics {1000 * np.mean(loop.timings['physics']):.0f} ms per tick")
     if plast is not None:
         OUT.mkdir(exist_ok=True)
         wpath = OUT / f"m3_learned_{plast.edge_set}_s{args.seed}_weights.npz"

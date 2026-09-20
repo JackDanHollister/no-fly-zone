@@ -27,7 +27,7 @@ class PilotLoop:
     def __init__(self, brain=None, seed: int | None = 0,
                  retina_zoom: float = 1.0,
                  retina_center: tuple[float, float] = (0.5, 0.5),
-                 eye_offset: float = 0.0):
+                 eye_offset: float = 0.0, pilot: str = "wired"):
         """eye_offset: each eye's retina window is shifted sideways by this
         fraction of the image (left eye leftwards, right eye rightwards), so
         the two eyes see different parts of the screen with binocular overlap
@@ -35,7 +35,10 @@ class PilotLoop:
         since both eye cameras render the same CRT."""
         self.game = BattleZone(seed=seed)
         self.dt = self.game.dt
-        self.cockpit = Cockpit()
+        if pilot not in ("wired", "embodied"):
+            raise ValueError("pilot must be 'wired' or 'embodied'")
+        self.pilot = pilot
+        self.cockpit = Cockpit(physics=(pilot == "embodied"))
         shape = (self.cockpit.render_height, self.cockpit.render_width)
         cx, cy = retina_center
         self.retina = HexRetina(image_shape=shape, zoom=retina_zoom,
@@ -101,9 +104,18 @@ class PilotLoop:
                    "episode_end": episode_end}
         dn = self._timed("brain", self.brain.step, drives, self.dt, signals)
         self.controls.update(dn, self.dt)
-        self.cockpit.set_controls(self.controls.lever_left,
-                                  self.controls.lever_right,
-                                  self.controls.fire)
+        if self.pilot == "embodied":
+            # the descending neurons' intent goes to the forelegs; the levers
+            # move as far as the legs push them; the action reads the levers
+            c = self.controls
+            self.cockpit.set_lever_targets(c.throttle - c.steer, c.throttle + c.steer)
+            self._timed("physics", self.cockpit.step_physics, self.dt)
+            c.measured = self.cockpit.lever_values()
+            self.cockpit.set_controls(0.0, 0.0, c.fire)   # fire button only
+        else:
+            self.cockpit.set_controls(self.controls.lever_left,
+                                      self.controls.lever_right,
+                                      self.controls.fire)
         return {"eye_left": eye_l, "rgb": rgb, "drives": drives, "dn": dn,
                 "reward": reward, "life_lost": life_lost,
                 "episode_end": episode_end}

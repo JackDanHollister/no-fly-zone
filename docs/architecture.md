@@ -96,7 +96,7 @@ the spectacle. Same brain, eyes, cockpit, game in both.
       Missing: any CRT treatment (the screen is a flat box with the raw
       frame), warning lights beyond the single damage lamp, and that lamp sits
       about 35° above the eye cameras' optical axis, outside their view.
-- [ ] M6 — embodied mode: flybody seated, contact-driven controls (4090)
+- [x] M6 — embodied mode: flybody seated, contact-driven controls (4090); baseline 2026-09-20, see "Embodied mode" below
 - [ ] M7 — learning experiments + the showcase video
 
 ## Interface decisions (M2 review, 2026-09-13)
@@ -189,8 +189,8 @@ the code delivers. Fix the code or the wording, then delete the line.
   same stimuli) and its usable weight window is narrow; see
   `docs/research/wiring-controls-2026-09-18.md`. The Zenodo dump is still
   not fetched.
-- Mode flag: `--pilot wired|embodied` exists nowhere. `run_m2.py` and
-  `run_m3.py` take only `--steps` and `--video`.
+- Mode flag: `run_m3.py --pilot wired|embodied` since 2026-09-20; `run_m2.py`
+  is wired only.
 - FIRE channel: pIP10 is absent from the female v783 brain;
   `brain_connectome.py` reads oviDN under the `pIP10` key (and pIP10 itself
   where a dataset has it, as MaleCNS does) and the dashboard bar still says
@@ -239,8 +239,54 @@ the code delivers. Fix the code or the wording, then delete the line.
 - Attach conflict (MuJoCo 3.13): seating the fly warns because the flybody's
   option block (0.1 ms timestep, gravity -981 in centimetre units, noslip,
   density, viscosity, cone) differs from the cockpit's; parent values win.
-  Harmless while the fly is a kinematic puppet; embodied mode (M6) must pick
-  one unit system and timestep deliberately.
+  Harmless while the fly is a kinematic puppet; embodied mode takes the
+  flybody's option block wholesale (centimetres, milligrams, 0.1 ms), so the
+  warning there is down to the key and constraint-count limits, which do
+  not matter.
 - Housekeeping: `run_m3.py` never calls `loop.close()`;
   `PilotLoop.latency_report()` divides by zero before the first step; the
   macOS `.pth` note below is Mac-specific and does not apply on Linux.
+
+
+## Embodied mode (M6, 2026-09-20)
+
+`Cockpit(physics=True)`, reached by `run_m3.py --pilot embodied`. What is
+physical and what is not, in order of the loop:
+
+1. The descending neurons' rates go through the same controller as in
+   wired mode and give an intended steer and throttle.
+2. The intent is turned into a target angle for each lever (a full command
+   is 0.3 rad) and into T1 leg joint targets by a damped least-squares
+   inverse kinematics on the claw site, so the claw follows the knob's arc.
+   Those targets go to the flybody's own leg position servos (gain 0.8).
+3. MuJoCo steps 667 times at 0.1 ms per game tick with the flybody's option
+   block. The thorax is on the seat frame (a tethered fly); the T1 claws
+   adhere (the model's adhesion actuators, on); the levers are fly-scale
+   bodies (density 1.18, a 0.05 return spring) that collide only with the
+   claws. The fly's own body-part collision geoms are off, tarsi and claws
+   excepted, because the thorax mesh interpenetrates head and coxae at the
+   stance and a welded fly chatters at 1,000 rad/s from it.
+4. The lever hinge angles are read, zeroed where the legs' neutral
+   command leaves them, normalised by the 0.08 rad a fly's push achieves
+   (measured; the hinge travels 0.55), and become `controls.measured`; the
+   ALE action is taken from those, not from the intent, through a dead
+   zone of 0.35 of the push range, because a pushed lever rests 0.15-0.26
+   from zero when released (a real hysteresis of claw, adhesion and
+   servo; the return spring does not change it) and without the dead zone
+   that rest sat on the reverse threshold and the fly backed up for 940 of
+   1,500 ticks. The treads on the dashboard show the physical levers.
+5. The fire button stays puppeted from the DN drive; contact-driven fire
+   (a leg or the proboscis on the button) is open.
+
+Measured: the gate `scripts/validate_embodied.py` moves the levers to
++1.0 forward, -0.7 back, and (+0.9, -0.7) for a turn, with the claws in
+contact throughout and no chatter; physics costs about 32 ms per 66.7 ms
+game tick on the workstation CPU, so the embodied pilot runs at about
+real time with the CUDA brain. A MuJoCo 3.13 quirk found on the way: with
+the levers' contact flags written in the XML on every geom of the body,
+the claw contacts vanished; set after compile they are kept.
+
+Open: the wings droop (their joints are torque motors with zero command);
+the achieved lever angle is about a quarter of the IK target (servo gain
+against spring and contact), which the normalisation absorbs; contact
+fire; the VNC for the male.

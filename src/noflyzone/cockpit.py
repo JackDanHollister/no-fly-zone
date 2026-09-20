@@ -16,8 +16,24 @@ cameras, and nothing enters the eye-camera corridor to the screen.
 
 Without the assets the scene falls back to the bare cockpit so tests run
 before fetching 137 MB of meshes. All rendering is single-threaded (macOS GL
-constraint); the fly is puppeted kinematically (qpos + mj_forward, no
-physics stepping).
+constraint). In wired mode the fly is puppeted kinematically (qpos +
+mj_forward, no physics stepping).
+
+Embodied mode (physics=True, M6, 2026-09-20): the scene is stepped with
+the flybody's own option block (0.1 ms timestep, gravity -981, the model's
+units are centimetres and milligrams), the thorax stays on the seat frame
+(a tethered fly), every leg servo holds the stance keyframe, the T1 claws
+adhere, and the levers are fly-scale physical objects: density 1.18 like a
+leg, a weak return spring, colliding only with the fly's claws (the
+capsule used to sit in the deck and seat and was jammed). The fly's own
+body-part collision geoms are switched off, tarsi and claws excepted:
+the thorax mesh interpenetrates the head and coxae at the stance, which a
+free fly absorbs and a welded one turns into 1,000 rad/s chatter. Lever
+targets go through a small inverse-kinematics solve on the claw site so
+the claw follows the knob's arc; a fly's push moves a lever about 0.08 rad
+of its 0.55 rad travel (measured), which is what lever readings are
+normalised by. The knobs sit LEVER_DROP lower than in wired mode so the
+claws rest on top of them instead of inside.
 """
 
 from pathlib import Path
@@ -29,6 +45,17 @@ from PIL import Image, ImageDraw, ImageFont
 TEX_SIZE = 256
 PLATE_W, PLATE_H = 256, 64
 LEVER_RANGE = 0.55  # rad of hinge travel for |value| = 1
+# embodied mode: what a fly's push achieves (rad), the IK target for a full
+# command, how far the knobs drop so the claws rest on top, lever physics
+LEVER_PUSH = 0.08
+LEVER_TARGET = 0.30
+LEVER_DROP = 0.016
+LEVER_STIFFNESS, LEVER_DAMPING, LEVER_DENSITY = 0.05, 0.005, 1.18
+FLY_OPTION = ('<option timestep="0.0001" gravity="0 0 -981" density="0.00128" '
+              'viscosity="0.000185" cone="elliptic" noslip_iterations="3"/>')
+T1_JOINTS = ("coxa_abduct_T1", "coxa_twist_T1", "coxa_T1", "femur_twist_T1",
+             "femur_T1", "tibia_T1", "tarsus_T1")
+KNOB_LEN, KNOB_R = 0.09, 0.013
 
 FLY_XML = Path(__file__).resolve().parents[2] / "assets" / "flybody" / "fruitfly.xml"
 
@@ -297,10 +324,32 @@ def _load_fly_stance() -> dict[str, float]:
     return stance
 
 
-def _build_model(with_fly: bool) -> mujoco.MjModel:
+def _physics_xml(xml: str) -> str:
+    """The wired scene with the flybody's option block and physical levers."""
+    xml = xml.replace('<mujoco model="no-fly-zone-cockpit">',
+                      '<mujoco model="no-fly-zone-cockpit">\n  ' + FLY_OPTION, 1)
+    for side, sx in (("left", "-"), ("right", "")):
+        old_body = f'<body name="lever_{side}" pos="{sx}{CLAW_X} {CLAW_Y} {CLAW_Z - 0.09}">'
+        assert old_body in xml
+        xml = xml.replace(old_body, f'<body name="lever_{side}" pos="{sx}{CLAW_X} {CLAW_Y} {CLAW_Z - 0.09 - LEVER_DROP}">')
+        old_joint = (f'<joint name="lever_{side}" type="hinge" axis="1 0 0"\n'
+                     f'             range="-{LEVER_RANGE} {LEVER_RANGE}" limited="true"/>')
+        assert old_joint in xml
+        xml = xml.replace(old_joint, f'<joint name="lever_{side}" type="hinge" axis="1 0 0" '
+                          f'range="-{LEVER_RANGE} {LEVER_RANGE}" limited="true" '
+                          f'stiffness="{LEVER_STIFFNESS}" damping="{LEVER_DAMPING}" armature="1e-5"/>')
+    xml = xml.replace('<geom type="capsule" fromto="0 0 0 0 0 0.085" size="0.007" material="metal"/>',
+                      f'<geom type="capsule" fromto="0 0 0 0 0 0.085" size="0.007" material="metal" density="{LEVER_DENSITY}"/>')
+    xml = xml.replace('<geom type="sphere" pos="0 0 0.09" size="0.013" material="knob"/>',
+                      f'<geom type="sphere" pos="0 0 0.09" size="0.013" material="knob" density="{LEVER_DENSITY}"/>')
+    return xml
+
+
+def _build_model(with_fly: bool, physics: bool = False) -> mujoco.MjModel:
+    xml = _physics_xml(_XML) if physics else _XML
     if not with_fly:
-        return mujoco.MjModel.from_xml_string(_XML)
-    spec = mujoco.MjSpec.from_string(_XML)
+        return mujoco.MjModel.from_xml_string(xml)
+    spec = mujoco.MjSpec.from_string(xml)
     child = mujoco.MjSpec.from_file(str(FLY_XML))
     for k in list(child.keys):
         child.delete(k)
@@ -474,13 +523,16 @@ def _paint_decals(model: mujoco.MjModel) -> None:
 
 class Cockpit:
     def __init__(self, render_width: int = 320, render_height: int = 240,
-                 with_fly: bool | None = None):
+                 with_fly: bool | None = None, physics: bool = False):
         if with_fly is None:
             with_fly = FLY_XML.exists()
+        if physics and not with_fly:
+            raise ValueError("embodied mode needs the flybody assets")
         self.with_fly = with_fly
+        self.physics = physics
         self.render_width = render_width
         self.render_height = render_height
-        self.model = _build_model(with_fly)
+        self.model = _build_model(with_fly, physics)
         self.data = mujoco.MjData(self.model)
         if with_fly:
             for name, val in _load_fly_stance().items():
@@ -499,6 +551,8 @@ class Cockpit:
                      for name in ("lever_left", "lever_right", "fire_button")}
         _paint_decals(self.model)
         mujoco.mj_forward(self.model, self.data)
+        if physics:
+            self._setup_physics()
         self._renderer = mujoco.Renderer(self.model, height=render_height,
                                          width=render_width)
 
@@ -513,11 +567,124 @@ class Cockpit:
 
     def set_controls(self, lever_left: float, lever_right: float,
                      fire: bool) -> None:
-        """Puppet the controls (wired mode). Lever values in [-1, 1]."""
-        self.data.qpos[self._jnt["lever_left"]] = lever_left * LEVER_RANGE
-        self.data.qpos[self._jnt["lever_right"]] = lever_right * LEVER_RANGE
+        """Puppet the controls (wired mode). Lever values in [-1, 1]. In
+        embodied mode only the fire button is puppeted; the levers are
+        physical and move through set_lever_targets()."""
+        if not self.physics:
+            self.data.qpos[self._jnt["lever_left"]] = lever_left * LEVER_RANGE
+            self.data.qpos[self._jnt["lever_right"]] = lever_right * LEVER_RANGE
         self.data.qpos[self._jnt["fire_button"]] = -0.008 if fire else 0.0
         mujoco.mj_forward(self.model, self.data)
+
+    # -- embodied mode --------------------------------------------------------
+
+    def _setup_physics(self) -> None:
+        m, d = self.model, self.data
+        lever_bodies = {m.body("lever_left").id, m.body("lever_right").id, m.body("fire_button").id}
+        for g in range(m.ngeom):
+            name = m.geom(g).name
+            if m.geom_bodyid[g] in lever_bodies:
+                # set after compile: with these flags in the XML on every geom of
+                # the body, MuJoCo 3.13 dropped the claw contacts (measured)
+                m.geom_contype[g] = 4; m.geom_conaffinity[g] = 4
+            elif name.startswith("fly-") and "collision" in name:
+                if "claw" in name:
+                    m.geom_contype[g] |= 4; m.geom_conaffinity[g] |= 4
+                else:
+                    m.geom_contype[g] = 0; m.geom_conaffinity[g] = 0
+        stance = _load_fly_stance()
+        self._stance_ctrl = {}
+        for a in range(m.nu):
+            if m.actuator_trntype[a] == mujoco.mjtTrn.mjTRN_JOINT:
+                jn = m.joint(m.actuator_trnid[a, 0]).name.replace("fly-", "")
+                lo, hi = m.actuator_ctrlrange[a]
+                d.ctrl[a] = float(np.clip(stance.get(jn, 0.0), lo, hi))
+                self._stance_ctrl[jn] = d.ctrl[a]
+        for side in ("left", "right"):
+            d.ctrl[m.actuator(f"fly-adhere_claw_T1_{side}").id] = 1.0
+        self._t1 = {side: {"site": m.site(f"fly-claw_T1_{side}").id,
+                           "dofs": [m.joint(f"fly-{j}_{side}").dofadr[0] for j in T1_JOINTS],
+                           "qadr": [m.joint(f"fly-{j}_{side}").qposadr[0] for j in T1_JOINTS],
+                           "range": [m.jnt_range[m.joint(f"fly-{j}_{side}").id] for j in T1_JOINTS],
+                           "act": [m.actuator(f"fly-{j}_{side}").id for j in T1_JOINTS]}
+                    for side in ("left", "right")}
+        self._scratch = mujoco.MjData(m)
+        self.lever_targets = (0.0, 0.0)
+        self.physics_steps = 0
+        mujoco.mj_forward(m, d)
+        # zero the levers where the legs' neutral command leaves them
+        # (joystick calibration): settle, command (0, 0), settle, record
+        self._lever_zero = {"left": 0.0, "right": 0.0}
+        self.step_physics(0.2)
+        self.set_lever_targets(0.0, 0.0)
+        self.step_physics(0.3)
+        for side in ("left", "right"):
+            self._lever_zero[side] = float(d.qpos[self._jnt[f"lever_{side}"]])
+
+    def _knob_point(self, side: str, theta: float) -> np.ndarray:
+        """Where the claw should be for lever angle theta: on top of the knob."""
+        b = self.data.body(f"lever_{side}")
+        rot = np.array([[1, 0, 0], [0, np.cos(theta), -np.sin(theta)], [0, np.sin(theta), np.cos(theta)]])
+        return b.xpos + rot @ np.array([0.0, 0.0, KNOB_LEN + KNOB_R - 0.002])
+
+    def _ik(self, side: str, theta: float, iters: int = 8, lam: float = 1e-3) -> list[float]:
+        """T1 joint angles that put the claw at the knob point: damped least
+        squares on the claw site's Jacobian, on a scratch copy of the state."""
+        m, t1, sc = self.model, self._t1[side], self._scratch
+        sc.qpos[:] = self.data.qpos
+        mujoco.mj_forward(m, sc)
+        goal = self._knob_point(side, theta)
+        jacp = np.zeros((3, m.nv))
+        for _ in range(iters):
+            mujoco.mj_jacSite(m, sc, jacp, None, t1["site"])
+            J = jacp[:, t1["dofs"]]
+            err = goal - sc.site_xpos[t1["site"]]
+            dq = np.linalg.solve(J.T @ J + lam * np.eye(len(t1["dofs"])), J.T @ err)
+            for k, qa in enumerate(t1["qadr"]):
+                lo, hi = t1["range"][k]
+                sc.qpos[qa] = np.clip(sc.qpos[qa] + dq[k], lo, hi)
+            mujoco.mj_forward(m, sc)
+        return [float(sc.qpos[qa]) for qa in t1["qadr"]]
+
+    def set_lever_targets(self, left: float, right: float) -> None:
+        """Embodied mode: command the forelegs to push the levers toward
+        these values in [-1, 1] (+ = forward). The levers only move as far as
+        the legs, the springs and the contacts let them."""
+        self.lever_targets = (float(np.clip(left, -1, 1)), float(np.clip(right, -1, 1)))
+        for side, cmd in zip(("left", "right"), self.lever_targets):
+            targets = self._ik(side, -cmd * LEVER_TARGET)   # +angle tips the knob backward
+            for a, v in zip(self._t1[side]["act"], targets):
+                lo, hi = self.model.actuator_ctrlrange[a]
+                self.data.ctrl[a] = float(np.clip(v, lo, hi))
+
+    def step_physics(self, seconds: float) -> int:
+        """Advance the scene by wall-time seconds of simulation."""
+        n = max(1, round(seconds / self.model.opt.timestep))
+        for _ in range(n):
+            mujoco.mj_step(self.model, self.data)
+        self.physics_steps += n
+        return n
+
+    def lever_values(self) -> tuple[float, float]:
+        """Measured lever positions in [-1, 1], + = forward, normalised by
+        what a fly's push achieves (LEVER_PUSH), not the hinge's travel."""
+        vals = []
+        for side in ("left", "right"):
+            angle = self.data.qpos[self._jnt[f"lever_{side}"]] - self._lever_zero[side]
+            vals.append(float(np.clip(-angle / LEVER_PUSH, -1.0, 1.0)))
+        return vals[0], vals[1]
+
+    def lever_contacts(self) -> dict[str, int]:
+        """Contacts on each lever this step (the claws, in embodied mode)."""
+        m, d = self.model, self.data
+        out = {"left": 0, "right": 0}
+        for i in range(d.ncon):
+            c = d.contact[i]
+            names = m.body(m.geom_bodyid[c.geom1]).name + m.body(m.geom_bodyid[c.geom2]).name
+            for side in out:
+                if f"lever_{side}" in names:
+                    out[side] += 1
+        return out
 
     def set_lamp(self, on: bool) -> None:
         self.model.geom_rgba[self._lamp_id] = _LAMP_ON if on else _LAMP_OFF

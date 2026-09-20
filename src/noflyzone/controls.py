@@ -68,6 +68,14 @@ class CockpitControls:
         self.steer = 0.0     # -1 (left) .. +1 (right)
         self.throttle = 0.0  # -1 (reverse) .. +1 (forward)
         self.fire = False
+        # embodied mode: the levers' measured positions (left, right) in
+        # [-1, 1]; when set, the action and the treads come from these, not
+        # from the intended steer/throttle above
+        self.measured: tuple[float, float] | None = None
+        # physical levers do not return all the way: after a push they rest
+        # 0.15-0.26 of the push range from zero (measured 2026-09-20), so the
+        # measured values pass through a dead zone, as a joystick's do
+        self.deadzone = 0.35
 
     def update(self, rates: dict[str, float], dt: float) -> None:
         if self.adaptive:
@@ -118,21 +126,39 @@ class CockpitControls:
 
     @property
     def lever_left(self) -> float:
+        if self.measured is not None:
+            return self.measured[0]
         return float(np.clip(self.throttle - self.steer, -1.0, 1.0))
 
     @property
     def lever_right(self) -> float:
+        if self.measured is not None:
+            return self.measured[1]
         return float(np.clip(self.throttle + self.steer, -1.0, 1.0))
 
+    @property
+    def effective(self) -> tuple[float, float]:
+        """(steer, throttle) that the action is taken from: the intent in
+        wired mode, the levers' measured positions in embodied mode."""
+        if self.measured is None:
+            return self.steer, self.throttle
+        left, right = (self._dead(v) for v in self.measured)
+        return (right - left) / 2.0, (left + right) / 2.0
+
+    def _dead(self, v: float) -> float:
+        dz = self.deadzone
+        return float(np.sign(v) * max(0.0, abs(v) - dz) / (1.0 - dz))
+
     def to_action(self) -> int:
+        steer, throttle = self.effective
         parts = []
-        if self.throttle > 0.25:
+        if throttle > 0.25:
             parts.append("UP")
-        elif self.throttle < -0.25:
+        elif throttle < -0.25:
             parts.append("DOWN")
-        if self.steer > 0.3:
+        if steer > 0.3:
             parts.append("RIGHT")
-        elif self.steer < -0.3:
+        elif steer < -0.3:
             parts.append("LEFT")
         name = "".join(parts) or "NOOP"
         if parts and self.saccade_hold > 0:
