@@ -207,16 +207,19 @@ the code delivers. Fix the code or the wording, then delete the line.
   35° above the optical axis, so "a flash is a real stimulus" is not yet true.
   It is also a solid 0.5 s latch with no emissive material.
 - Levers and physics: nothing calls `mj_step`; `set_controls` writes qpos and
-  calls `mj_forward`. Levers are a visual puppet of the action, not the cause
-  of it. There are no pedals.
-- Stance keyframe: the fetched `fruitfly.xml` has no `<key>`, so applying
-  `key_qpos[0]` by joint name is a no-op. `pov_camera` is dead code at HEAD.
+  calls `mj_forward`. In wired mode the levers are a visual puppet of the
+  action, not the cause of it; in embodied mode (2026-09-20) they are the
+  cause. There are no pedals.
+- Stance keyframe: the fetched `fruitfly.xml` carries one keyframe (checked
+  2026-09-20: `nkey` 1) and `_load_fly_stance()` reads it; the 2026-09-14
+  note that it was missing is out of date. `pov_camera` is dead code at HEAD.
 - Retina: `WHITE_REF` is exactly 255.0 and has not been re-measured since the
   lighting changes; the retina is a from-scratch hex lattice, flygym is not
   imported; ommatidia are not mapped by real ray directions (deferred, now
   unclaimed by any milestone).
-- Tests: `pyproject.toml` declares a pytest extra but there is no `tests/`
-  directory; `smoke_battlezone.py` has no assertions.
+- Tests: `tests/` exists since 2026-09-14 (31 tests on 2026-09-20; the
+  data, CUDA and flybody-dependent ones skip without their assets);
+  `smoke_battlezone.py` still has no assertions.
 - Versions: `mujoco>=3.2` is floored but `MjSpec.delete()` needs 3.3.4+, and
   `cockpit.py` reaches into the private `Renderer._mjr_context`; `game.py`
   reads the private `env.unwrapped._frameskip`. Known-good set on the
