@@ -9,6 +9,13 @@ against the pre-registered controls.
                edges touching neither end
 --init-weights out/plasticity_<tag>_weights.npz  start from learned weights;
                with --rule lr0 that is a frozen evaluation of a learned brain
+--dopamine events  a kill pulses PAM and a hit pulses PPL1 (2026-09-19)
+--dopamine rpe     the teaching signal is a reward-prediction error from a
+               linear critic over the pooled descending/visual-projection
+               features (TD(0), learned online): PAM fires for a better-than-
+               predicted outcome, PPL1 for a worse one, in proportion. A hit
+               that a loom already predicted teaches nothing; an escape that
+               averts a predicted hit is rewarded (2026-09-20)
 
 Same seeds and settings across conditions. Logs one line per episode
 (kills, lives lost, weight drift, dopamine statistics) to
@@ -50,6 +57,10 @@ def main() -> None:
                          "each pool's running peak so a gain change does not break the thresholds")
     ap.add_argument("--teaching", choices=["both", "kills", "hits"], default="both",
                     help="which game events teach: kills pulse PAM, hits pulse PPL1, or only one of them")
+    ap.add_argument("--dopamine", choices=["events", "rpe"], default="events")
+    ap.add_argument("--critic-lr", type=float, default=1e-3)
+    ap.add_argument("--gamma", type=float, default=0.97)
+    ap.add_argument("--rpe-hz", type=float, default=100.0, help="teaching rate at |RPE| = one running RMS")
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--episodes", type=int, default=20, help="per fly")
     ap.add_argument("--episode-ticks", type=int, default=900)
@@ -88,22 +99,44 @@ def main() -> None:
                                 startle_refractory=15, steer_mode="li") for _ in range(args.batch)]
     OUT.mkdir(exist_ok=True)
     log = open(OUT / f"plasticity_{tag}.jsonl", "w")
-    squad.reset()
+    obs = squad.reset()
+    # the critic: V(x) = w . x over the squad's pooled features, TD(0)
+    critic_w = np.zeros(squad.n_features + 1, np.float64)
+    rpe_rms = 0.1        # the reward scale; adapts with a 1,000-tick memory
+    x_prev = np.c_[obs, np.ones(args.batch)]
+    rpe_log = []
     done_eps = 0; ep_index = np.zeros(args.batch, int)
     t0 = time.time(); diag_acc = []
     target = args.batch * args.episodes
     while done_eps < target:
         actions = np.array([c.to_action() for c in controls])
-        # teaching pulses go in before the tick they should act on
-        rates = plast.teaching_rates()
-        squad.set_teaching("pam", rates["pam"])
-        squad.set_teaching("ppl1", rates["ppl1"])
+        # teaching goes in before the tick it should act on
+        if args.dopamine == "events":
+            rates = plast.teaching_rates()
+            squad.set_teaching("pam", rates["pam"])
+            squad.set_teaching("ppl1", rates["ppl1"])
         obs, rew, done, infos = squad.step(actions)
         kills = np.array([i["kill"] for i in infos]); hits = np.array([i["life_lost"] for i in infos])
         if args.teaching == "kills":
             hits = np.zeros_like(hits)
         elif args.teaching == "hits":
             kills = np.zeros_like(kills)
+        if args.dopamine == "rpe":
+            # one critic for the squad (shared weights, pooled experience), one
+            # prediction error per fly; the teaching rate for the next tick is
+            # the squad's mean error in units of its running RMS
+            x = np.c_[obs, np.ones(args.batch)]
+            r = kills.astype(float) - 0.5 * hits.astype(float)
+            v_prev = x_prev @ critic_w; v_next = np.where(done, 0.0, x @ critic_w)
+            delta = r + args.gamma * v_next - v_prev
+            critic_w += args.critic_lr * (delta[:, None] * x_prev).mean(axis=0)
+            rpe_rms = 0.999 * rpe_rms + 0.001 * float(np.sqrt(np.mean(delta ** 2)) + 1e-6)
+            d_mean = float(delta.mean()) / rpe_rms
+            squad.set_teaching("pam", args.rpe_hz * float(np.clip(d_mean, 0.0, 2.0)))
+            squad.set_teaching("ppl1", args.rpe_hz * float(np.clip(-d_mean, 0.0, 2.0)))
+            x_prev = x
+            rpe_log.append(d_mean)
+            kills = np.zeros_like(kills); hits = np.zeros_like(hits)   # no event pulses on top
         d = plast.step(squad.last_counts, kills, hits); diag_acc.append(d)
         for i, c in enumerate(controls):
             c.update(squad.last_dn[i], squad.dt)
@@ -116,6 +149,9 @@ def main() -> None:
                    "pam_hz": float(np.mean([x["pam_hz"] for x in recent])),
                    "ppl1_hz": float(np.mean([x["ppl1_hz"] for x in recent])),
                    "da_centred": float(np.mean([x["da_centred"] for x in recent])),
+                   "rpe_mean": float(np.mean(rpe_log[-args.episode_ticks:])) if rpe_log else None,
+                   "rpe_abs": float(np.mean(np.abs(rpe_log[-args.episode_ticks:]))) if rpe_log else None,
+                   "critic_norm": float(np.linalg.norm(critic_w)),
                    "wall_s": time.time() - t0}
             log.write(json.dumps(row) + "\n"); log.flush()
             print(f"ep {done_eps:3d}/{target} fly {i} #{ep_index[i]:2d}: kills {e['kills']} lives {e['lives_lost']} "
@@ -124,7 +160,8 @@ def main() -> None:
                 controls[i] = CockpitControls(squad.action_names, calibration=calibration, saccade_hold=3,
                                               startle_refractory=15, steer_mode="li")
     savez(OUT / f"plasticity_{tag}_weights.npz", args=args, brain=squad.brain,
-          pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post)
+          pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post,
+          critic_w=critic_w)
     if calibration == "adaptive":
         peaks = {k: float(np.mean([c.peak[k] for c in controls])) for k in controls[0].peak}
         dump_json(OUT / f"plasticity_{tag}_peaks.json", peaks, args=args, brain=squad.brain)
