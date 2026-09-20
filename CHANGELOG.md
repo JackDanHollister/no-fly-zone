@@ -45,7 +45,11 @@
   episode against 1.90) and kill as often or more (0.85, 1.08 against
   0.85), the first learned brains to beat the measured one; the rule
   potentiated the steer, drive and escape inputs. `scripts/probe_shell.py`
-  measures what the retina carries before a hit. More seeds queued.
+  and a window sweep: the shell is smaller than one ommatidium until it
+  is nearly home, at any window that covers its path; only a window aimed
+  low catches it in one hit of four, over the last eight ticks. The hit
+  is unpredictable to this fly for the reason a real fly would not see a
+  pellet. More seeds queued.
 - Learning, third pass (`train_plasticity.py --dopamine rpe`, `docs/research/
   learning-2026-09-19.md`, last section): the teaching signal as a
   reward-prediction error from a linear critic over the pooled population
