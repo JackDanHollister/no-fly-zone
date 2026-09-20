@@ -2,6 +2,13 @@
 
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
+- `make_video.py showcase`: the 66 s cut from the seed-0 recordings, on
+  a 1440 x 1024 canvas with captions: title, the female's contact windows
+  with the eyes panel, the embodied pilot's windows with the proboscis
+  labelled when it fires, the female and male side by side at the first
+  kill, then the measured findings and the caveats on cards. Nothing is
+  replay; every card states the settings.
+
 - M6 embodied mode, baseline (`Cockpit(physics=True)`, `PilotLoop(pilot=
   "embodied")`, `run_m3.py --pilot embodied`, `docs/architecture.md`
   "Embodied mode"). The scene steps with the flybody's option block; the
