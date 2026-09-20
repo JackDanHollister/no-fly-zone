@@ -26,6 +26,15 @@
   than gravity on the button). The wings are held at the stance by a
   spring. The gate covers the button. Seed 0 fully embodied: 2000, three
   lives lost, 16 shots (wired: 3000, seven, 28), at real time.
+- Learning, third pass (`train_plasticity.py --dopamine rpe`, `docs/research/
+  learning-2026-09-19.md`, last section): the teaching signal as a
+  reward-prediction error from a linear critic over the pooled population
+  (TD(0), online). The critic did not learn (weight norm 0.01), the error
+  reduced to the raw reinforcer, the loom pathway was depressed again and
+  the two learned brains die more on the frozen test (2.60 / 2.62 lives
+  against 1.90), like the events brains. Normalised-LMS critics at steps
+  0.5 and 0.1 probed on the side predict hits no better within the
+  budget. Kept for a structured predictor; the diagnosis is unchanged.
 - Size tuning (`docs/research/size-tuning-2026-09-20.md`): injection map
   v7, v4 with the medulla transients surround-antagonised at the retina
   (radius 3, `surround_matrix`/`centre_surround`, labelled ENGINEERED),

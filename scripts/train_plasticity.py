@@ -58,7 +58,9 @@ def main() -> None:
     ap.add_argument("--teaching", choices=["both", "kills", "hits"], default="both",
                     help="which game events teach: kills pulse PAM, hits pulse PPL1, or only one of them")
     ap.add_argument("--dopamine", choices=["events", "rpe"], default="events")
-    ap.add_argument("--critic-lr", type=float, default=1e-3)
+    ap.add_argument("--critic-lr", type=float, default=0.5,
+                    help="normalised-LMS TD(0) step: a hit moves the prediction of its state by this "
+                         "fraction of the error (1e-3 unnormalised left the critic at zero, 2026-09-20)")
     ap.add_argument("--gamma", type=float, default=0.97)
     ap.add_argument("--rpe-hz", type=float, default=100.0, help="teaching rate at |RPE| = one running RMS")
     ap.add_argument("--batch", type=int, default=4)
@@ -100,11 +102,22 @@ def main() -> None:
     OUT.mkdir(exist_ok=True)
     log = open(OUT / f"plasticity_{tag}.jsonl", "w")
     obs = squad.reset()
-    # the critic: V(x) = w . x over the squad's pooled features, TD(0)
+    # the critic: V(x) = w . x over the squad's pooled features, standardised
+    # by a running mean and variance, TD(0)
     critic_w = np.zeros(squad.n_features + 1, np.float64)
+    feat_mean = np.zeros(squad.n_features); feat_var = np.ones(squad.n_features); feat_n = 1e-3
+    def standardise(o):
+        nonlocal feat_mean, feat_var, feat_n
+        bm, bv, bc = o.mean(0), o.var(0), o.shape[0]
+        d_ = bm - feat_mean; tot = feat_n + bc
+        feat_mean = feat_mean + d_ * bc / tot
+        feat_var = (feat_var * feat_n + bv * bc + d_ ** 2 * feat_n * bc / tot) / tot
+        feat_n = tot
+        return np.c_[(o - feat_mean) / np.sqrt(feat_var + 1e-6), np.ones(o.shape[0])]
     rpe_rms = 0.1        # the reward scale; adapts with a 1,000-tick memory
-    x_prev = np.c_[obs, np.ones(args.batch)]
+    x_prev = standardise(obs)
     rpe_log = []
+    hit_rpe = []         # (global tick, mean delta at flies that were hit): does the critic learn to expect them?
     done_eps = 0; ep_index = np.zeros(args.batch, int)
     t0 = time.time(); diag_acc = []
     target = args.batch * args.episodes
@@ -125,11 +138,15 @@ def main() -> None:
             # one critic for the squad (shared weights, pooled experience), one
             # prediction error per fly; the teaching rate for the next tick is
             # the squad's mean error in units of its running RMS
-            x = np.c_[obs, np.ones(args.batch)]
+            x = standardise(obs)
             r = kills.astype(float) - 0.5 * hits.astype(float)
             v_prev = x_prev @ critic_w; v_next = np.where(done, 0.0, x @ critic_w)
             delta = r + args.gamma * v_next - v_prev
-            critic_w += args.critic_lr * (delta[:, None] * x_prev).mean(axis=0)
+            # normalised LMS, one update per fly: the prediction for that fly's
+            # state moves by critic_lr times its error
+            critic_w += (args.critic_lr * (delta[:, None] * x_prev) / (1.0 + np.sum(x_prev ** 2, axis=1))[:, None]).sum(axis=0)
+            if hits.any():
+                hit_rpe.append((len(rpe_log), float(delta[hits.astype(bool)].mean())))
             rpe_rms = 0.999 * rpe_rms + 0.001 * float(np.sqrt(np.mean(delta ** 2)) + 1e-6)
             d_mean = float(delta.mean()) / rpe_rms
             squad.set_teaching("pam", args.rpe_hz * float(np.clip(d_mean, 0.0, 2.0)))
@@ -152,6 +169,7 @@ def main() -> None:
                    "rpe_mean": float(np.mean(rpe_log[-args.episode_ticks:])) if rpe_log else None,
                    "rpe_abs": float(np.mean(np.abs(rpe_log[-args.episode_ticks:]))) if rpe_log else None,
                    "critic_norm": float(np.linalg.norm(critic_w)),
+                   "hit_rpe": float(np.mean([v for _, v in hit_rpe[-20:]])) if hit_rpe else None,
                    "wall_s": time.time() - t0}
             log.write(json.dumps(row) + "\n"); log.flush()
             print(f"ep {done_eps:3d}/{target} fly {i} #{ep_index[i]:2d}: kills {e['kills']} lives {e['lives_lost']} "

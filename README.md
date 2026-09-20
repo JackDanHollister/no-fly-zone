@@ -257,9 +257,11 @@ the female brain, so oviDN is read out under that name.
    and what it learns is harmful; see Status), and the PPO readout at
    three seeds per condition with the kill-shaped reward (no condition
    beats another or random play), and on 2026-09-20 the adaptive-readout
-   test that ruled out calibration as the cause. Still open, for in-brain
-   learning: a rule whose eligibility is tied to the fly's actions rather
-   than its inputs, or a readout learned jointly with the synapses; a
+   test that ruled out calibration as the cause, and a reward-prediction-
+   error dopamine whose critic could not learn to predict the hits (the
+   brains die more, as before). Still open, for in-brain learning: a
+   teaching signal that carries credit (a structured predictor of the
+   hit, or a readout learned jointly with the synapses); a
    deliberate, labelled calyx-gain experiment if the mushroom body is ever
    to learn.
 7. M6, baseline done 2026-09-20 (`docs/architecture.md`, "Embodied mode"):
