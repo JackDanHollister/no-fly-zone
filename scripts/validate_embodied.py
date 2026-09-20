@@ -17,7 +17,7 @@ from noflyzone.cockpit import FLY_XML, LEVER_PUSH, Cockpit
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--settle", type=float, default=0.4, help="seconds of physics per command")
+    ap.add_argument("--ticks", type=int, default=6, help="game ticks per command; the legs are re-targeted every tick, as in play")
     ap.add_argument("--min-value", type=float, default=0.5)
     args = ap.parse_args()
     if not FLY_XML.exists():
@@ -32,8 +32,9 @@ def main() -> None:
     for name, (l, r), want in (("forward", (1, 1), (+1, +1)), ("back", (-1, -1), (-1, -1)),
                                ("left", (1, -1), (+1, -1)), ("right", (-1, 1), (-1, +1)),
                                ("release", (0, 0), (0, 0))):
-        c.set_lever_targets(l, r)
-        c.step_physics(args.settle)
+        for _ in range(args.ticks):
+            c.set_lever_targets(l, r)
+            c.step_physics(1 / 15)
         v = c.lever_values(); con = c.lever_contacts(); q = float(np.abs(c.data.qvel).max())
         good = all((abs(x) < 0.35) if w == 0 else (np.sign(x) == w and abs(x) >= args.min_value) for x, w in zip(v, want))
         good &= con["left"] > 0 and con["right"] > 0 and q < 50

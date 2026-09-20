@@ -99,6 +99,8 @@ INJECTION_MAPS = {
     ],
 }
 LOWPASS_TAU = 0.15  # s, the slow channels' time constant
+SURROUND_RADIUS = 3.0   # lattice spacings; wider than the screen's small disc (radius 2) so its centre keeps 0.6 of its drive
+SURROUND_K = 1.0
 
 # v6: direction computed OUTSIDE the wiring. A Hassenstein-Reichardt
 # correlator over neighbouring ommatidia (this tick's ON or OFF transient at
@@ -110,6 +112,19 @@ LOWPASS_TAU = 0.15  # s, the slow channels' time constant
 # leaves everything downstream of T4/T5 on the connectome. The letter-to-
 # direction assignment (a: +x, b: -x, c: +y, d: -y on the retina's
 # normalised axes) is a convention and is recorded with the map.
+# v7: v4 with the medulla transient channels surround-antagonised at the
+# retina (centre minus the mean of the ommatidia within SURROUND_RADIUS,
+# rectified), the stage a point LIF over columnar inputs cannot compute and
+# the fly does in the lamina and medulla (L2/C3 and Mi4/Mi9/CT1 surrounds).
+# Labelled ENGINEERED like v6; the question is whether the wiring downstream
+# builds size-tuned descending neurons from it, as it built HS/VS from v6.
+INJECTION_MAPS["v7"] = [
+    ("R1-6", "lum", MAX_PR_RATE),
+    ("Mi1", "on_cs", 3000.0), ("Tm3", "on_cs", 3000.0),
+    ("Tm1", "off_cs", 3000.0), ("Tm2", "off_cs", 2000.0),
+    ("Tm4", "off_cs", 2000.0), ("Tm9", "off_cs", 2000.0),
+    ("T3", "onoff_cs", 3000.0),
+]
 INJECTION_MAPS["v6"] = INJECTION_MAPS["v4"] + [
     ("T4a", "on_dir_px", 20000.0), ("T4b", "on_dir_mx", 20000.0),
     ("T4c", "on_dir_py", 20000.0), ("T4d", "on_dir_my", 20000.0),
@@ -131,6 +146,31 @@ INJECTION_MAPS["v6m"] = INJECTION_MAPS["v4"] + [
     ("T5a", "off_dir_px|mx", 20000.0), ("T5b", "off_dir_mx|px", 20000.0),
     ("T5c", "off_dir_py", 20000.0), ("T5d", "off_dir_my", 20000.0),
 ]
+
+
+def surround_matrix(xy: np.ndarray, radius: float = 2.0):
+    """Row-normalised sparse averaging matrix over the ommatidia within
+    `radius` lattice spacings of each one (itself excluded): the surround
+    of a centre-surround receptive field on the hex lattice."""
+    from scipy import sparse
+    xy = np.asarray(xy, np.float64)
+    tree = cKDTree(xy)
+    spacing = float(np.median(tree.query(xy, k=2)[0][:, 1]))
+    rows, cols = [], []
+    for i, nb in enumerate(tree.query_ball_point(xy, r=radius * spacing + 1e-6)):
+        for j in nb:
+            if j != i:
+                rows.append(i); cols.append(j)
+    rows, cols = np.array(rows), np.array(cols)
+    counts = np.bincount(rows, minlength=len(xy)).astype(np.float64)
+    vals = 1.0 / counts[rows]
+    return sparse.csr_matrix((vals, (rows, cols)), shape=(len(xy), len(xy)))
+
+
+def centre_surround(sig: np.ndarray, S, k: float = 1.0) -> np.ndarray:
+    """Centre minus k times the mean of the surround, rectified: a small
+    object lights a centre without its surround, a large one lights both."""
+    return np.clip(sig - k * (S @ sig), 0.0, None)
 
 
 def lattice_neighbours(xy: np.ndarray) -> dict[str, np.ndarray]:
@@ -407,6 +447,8 @@ class ConnectomeBrain:
             start += len(idx)
         self._pr_all = np.concatenate(chunks)
         self._rates = np.zeros(len(self._pr_all), np.float32)
+        self._S = surround_matrix(retina.centers_xy, SURROUND_RADIUS) \
+            if any(mode.endswith("_cs") for mode, _, _, _, _ in self._pops) else None
         self.n_visual = int(sum(sl.stop - sl.start for _, _, sl, _, _ in self._pops))
         self._prev_lum: dict[str, np.ndarray | None] = {"left": None,
                                                         "right": None}
@@ -484,6 +526,12 @@ class ConnectomeBrain:
                 else lp + alpha * (lum[side] - lp)
         onoff = {side: (np.clip(delta[side], 0.0, None), np.clip(-delta[side], 0.0, None))
                  for side in lum}
+        cs = {}
+        if self._S is not None:
+            for side in lum:
+                cs[(side, "on_cs")] = centre_surround(onoff[side][0], self._S, SURROUND_K)
+                cs[(side, "off_cs")] = centre_surround(onoff[side][1], self._S, SURROUND_K)
+                cs[(side, "onoff_cs")] = cs[(side, "on_cs")] + cs[(side, "off_cs")]
         dirs: dict[tuple[str, str], np.ndarray] = {}
         for side in lum:
             prev = self._prev_onoff[side]
@@ -503,6 +551,8 @@ class ConnectomeBrain:
                 sig = self._lp[side][omm]
             elif mode == "dark_lp":    # slow sustained in the dark
                 sig = 1.0 - self._lp[side][omm]
+            elif mode.endswith("_cs"):   # v7 surround-antagonised transients
+                sig = cs[(side, mode)][omm]
             elif mode.startswith(("on_dir_", "off_dir_")):  # v6 correlator channels
                 key = mode
                 if "|" in mode:  # "left|right" channel names (v6m mirrors the right eye)

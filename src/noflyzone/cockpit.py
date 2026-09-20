@@ -49,6 +49,8 @@ LEVER_RANGE = 0.55  # rad of hinge travel for |value| = 1
 # command, how far the knobs drop so the claws rest on top, lever physics
 LEVER_PUSH = 0.08
 LEVER_TARGET = 0.30
+LEVER_KP = 0.5        # the legs push harder by this much per unit of lever error (1.0 overshoots, measured)
+LEVER_TARGET_MAX = 0.30   # beyond this the claw path leaves the knob and the lever goes the wrong way
 LEVER_DROP = 0.016
 LEVER_STIFFNESS, LEVER_DAMPING, LEVER_DENSITY = 0.05, 0.005, 1.18
 FLY_OPTION = ('<option timestep="0.0001" gravity="0 0 -981" density="0.00128" '
@@ -651,8 +653,13 @@ class Cockpit:
         these values in [-1, 1] (+ = forward). The levers only move as far as
         the legs, the springs and the contacts let them."""
         self.lever_targets = (float(np.clip(left, -1, 1)), float(np.clip(right, -1, 1)))
-        for side, cmd in zip(("left", "right"), self.lever_targets):
-            targets = self._ik(side, -cmd * LEVER_TARGET)   # +angle tips the knob backward
+        measured = self.lever_values() if hasattr(self, "_lever_zero") else (0.0, 0.0)
+        for side, cmd, got in zip(("left", "right"), self.lever_targets, measured):
+            # proportional: a lever that does not read what is asked is pushed
+            # harder (a pushed lever rests short of zero when released)
+            theta = -LEVER_TARGET * (cmd + LEVER_KP * (cmd - got))   # +angle tips the knob backward
+            theta = float(np.clip(theta, -LEVER_TARGET_MAX, LEVER_TARGET_MAX))
+            targets = self._ik(side, theta)
             for a, v in zip(self._t1[side]["act"], targets):
                 lo, hi = self.model.actuator_ctrlrange[a]
                 self.data.ctrl[a] = float(np.clip(v, lo, hi))
