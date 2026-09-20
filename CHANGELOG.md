@@ -49,7 +49,9 @@
   is nearly home, at any window that covers its path; only a window aimed
   low catches it in one hit of four, over the last eight ticks. The hit
   is unpredictable to this fly for the reason a real fly would not see a
-  pellet. More seeds queued.
+  pellet. More seeds queued. `out/learned_latch_seed0.mp4`: the seed-1
+  latched brain playing seed 0 with the LEARNED WEIGHTS label, 4000 and
+  seven lives lost against the measured brain's 3000 and seven.
 - Learning, third pass (`train_plasticity.py --dopamine rpe`, `docs/research/
   learning-2026-09-19.md`, last section): the teaching signal as a
   reward-prediction error from a linear critic over the pooled population
