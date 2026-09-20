@@ -155,11 +155,14 @@ unseen games than the measured one (2.5-2.8 lives per episode against
 size-matched shuffled controls do not. Hits depress the loom pathway to a
 quarter of its measured weight, because a hit follows a loom and the rule
 punishes the response as the cause; kills potentiate the steer and escape
-inputs, and the fly dies just as much. With the readout's calibration
-fixed, the rule is a gain perturbation of a tuned reflex and has no
-helpful direction. `run_m3.py --learned-weights` plays any of these
-brains and `--learn vis_dn` runs the rule live, both labelled on the
-footer. The PPO readout was re-run the same day with three seeds per
+inputs, and the fly dies just as much. An adaptive readout whose spans
+follow each pool's own running peak (2026-09-20) rescues none of them,
+and the giant fibre's peak rate sits at the floor in every hits-trained
+brain: the loom pathway is gone, not rescaled. The harm is the rule's
+credit assignment, which attributes each reinforcer to the correct
+response that preceded it. `run_m3.py --learned-weights` plays any of
+these brains and `--learn vis_dn` runs the rule live, both labelled on
+the footer. The PPO readout was re-run the same day with three seeds per
 condition and a kill-shaped reward (a kill worth ten lives): on four
 unseen games the heads on the measured connectome, the rewired brain and
 the bare retina are indistinguishable (1.5, 1.4, 1.3 kills per 900 ticks,
@@ -221,10 +224,12 @@ the female brain, so oviDN is read out under that name.
    descending neurons' inputs, with controls and a frozen test (it learns,
    and what it learns is harmful; see Status), and the PPO readout at
    three seeds per condition with the kill-shaped reward (no condition
-   beats another or random play). Still open: a rule that moves the readout's calibration with the
-   synapses, or learns both (the only route left for in-brain learning
-   here); a deliberate, labelled calyx-gain experiment if the mushroom body
-   is ever to learn. Then M6.
+   beats another or random play), and on 2026-09-20 the adaptive-readout
+   test that ruled out calibration as the cause. Still open, for in-brain
+   learning: a rule whose eligibility is tied to the fly's actions rather
+   than its inputs, or a readout learned jointly with the synapses; a
+   deliberate, labelled calyx-gain experiment if the mushroom body is ever
+   to learn. Then M6.
 
 ## Architecture
 
