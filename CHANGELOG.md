@@ -24,7 +24,8 @@
   extends the proboscis and the shot is the button at 0.35 of its travel
   (rest 0.08, pressed 0.57; the first spring was a thousand times weaker
   than gravity on the button). The wings are held at the stance by a
-  spring. The gate covers the button.
+  spring. The gate covers the button. Seed 0 fully embodied: 2000, three
+  lives lost, 16 shots (wired: 3000, seven, 28), at real time.
 - Size tuning (`docs/research/size-tuning-2026-09-20.md`): injection map
   v7, v4 with the medulla transients surround-antagonised at the retina
   (radius 3, `surround_matrix`/`centre_surround`, labelled ENGINEERED),
