@@ -40,10 +40,11 @@ flies, where the shuffle builds none; given a small-object channel at
 T2/T3 the same way, it builds 14 small-object-selective descending
 neurons where three rewirings build none. A trained readout on top of it
 learns to survive but not to kill. A three-factor rule on the synapses
-onto its descending neurons, with the dopamine applied to what preceded
-each reinforcer, produces a brain that plays better than the measured one
-on unseen games (dies 1.4-1.6 times per episode against 1.9, two seeds
-so far).**
+onto its descending neurons makes the fly worse unless the dopamine is
+applied to what preceded each reinforcer rather than to the brain's
+response to it; with that, four learned brains are on average no
+different from the measured wiring on unseen games (two better, two
+worse), and none is yet shown to be better.**
 
 The brain runs as a leaky integrate-and-fire network over the measured
 wiring and is seated as the **pilot** inside a retro-futuristic 3D cockpit.
@@ -265,9 +266,11 @@ the female brain, so oviDN is read out under that name.
    error dopamine whose critic could not learn to predict the hits (the
    brains die more, as before); then the finding that the hit's shell
    never reaches the readout and the depression was the flash response,
-   and the latched eligibility that fixes it: the first learned brains
-   that beat the measured wiring on unseen games (two seeds; more
-   running). Still open: more seeds, the kills-only control, and a
+   and the latched eligibility that stops it: with the latch, four
+   learned brains are on average the measured brain on unseen games
+   (two better, two worse), where every unlatched brain was worse. Still
+   open: a rule that improves on the wiring, which at these seed spreads
+   would need many seeds to show, and a
    deliberate, labelled calyx-gain experiment if the mushroom body is ever
    to learn.
 7. M6, baseline done 2026-09-20 (`docs/architecture.md`, "Embodied mode"):

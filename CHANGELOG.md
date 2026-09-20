@@ -40,17 +40,19 @@
   depression came from the punishment pulse coinciding with the brain's
   response to the hit's own screen flash. `MBPlasticity(latch=True)`
   (`--latch`) applies a reinforcer's pulse to the eligibility as it
-  stood the tick before the event. Two seeds, frozen test: the latched
-  brains die less than the measured wiring (1.38 and 1.60 lives per
-  episode against 1.90) and kill as often or more (0.85, 1.08 against
-  0.85), the first learned brains to beat the measured one; the rule
-  potentiated the steer, drive and escape inputs. `scripts/probe_shell.py`
+  stood the tick before the event. Four seeds, frozen test: two latched
+  brains die less than the measured wiring (1.38, 1.60 lives per episode
+  against 1.90) and two die more (2.48, 2.50); pooled they are the
+  measured brain (0.84 kills, 1.99 lives against 0.85, 1.90). The latch
+  turns a rule that harmed six brains of six into one that on average
+  does no harm; it does not yet help. The rule potentiates the steer,
+  drive and escape inputs. `scripts/probe_shell.py`
   and a window sweep: the shell is smaller than one ommatidium until it
   is nearly home, at any window that covers its path; only a window aimed
   low catches it in one hit of four, over the last eight ticks. The hit
   is unpredictable to this fly for the reason a real fly would not see a
   pellet. The kills-only latched control (1.17 / 1.92 and 0.77 / 2.33) does
-  not match the mixed rule cleanly; more mixed seeds queued.
+  not match the mixed rule cleanly and is within the same spread.
   `out/learned_latch_seed0.mp4`: the seed-1
   latched brain playing seed 0 with the LEARNED WEIGHTS label, 4000 and
   seven lives lost against the measured brain's 3000 and seven.
