@@ -100,8 +100,9 @@ def highlights(video, trace, out_path):
     n_kills, n_deaths = len(kills), len(deaths)
     frames += card(size, [(f"{n_kills} kills, {n_deaths} lives lost in 100 seconds", 30, (230, 230, 230)),
                           ("a randomly rewired copy of the same brain scores the same", 24, (255, 200, 80)),
-                          ("the loop is real; the wiring is not yet shown to matter", 24, (180, 180, 190))],
-                   sub="github.com/JackDanHollister/no-fly-zone", seconds=4.0)
+                          ("but cannot tell which side the target is on; this one can (62 of 63 looks)", 24, (120, 255, 140)),
+                          ("the loop is real; the wiring keeps left from right, and what else it does is measured", 22, (180, 180, 190))],
+                   sub="github.com/JackDanHollister/no-fly-zone", seconds=4.5)
     w = imageio.get_writer(out_path, fps=FPS, codec="libx264", quality=8, macro_block_size=16)
     for fr in frames:
         w.append_data(fr)
