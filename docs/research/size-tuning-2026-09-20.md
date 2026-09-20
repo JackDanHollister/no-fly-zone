@@ -66,7 +66,48 @@ limit stands, but it is not the surround: the next engineered stage, if
 this is pursued, is wide-field motion opponency in the lobula (LPi-like
 inhibition), which is a different injection map and a different claim.
 
+## The second stage: wide-field opponency (v8)
+
+Injection map v8 adds the stage the note above asked for: the
+surround-antagonised transient minus the eye's mean surround energy,
+scaled by the fraction of the eye a small object covers (0.10), rectified
+(`wide_field_opponent`). On the retina a lone small disc keeps 0.82 of
+its drive, a tank-sized one 0.90, and a loom's edge ring past radius 5
+keeps nothing: the ring is everywhere at once and suppresses itself.
+Same battery, same brains:
+
+| brain | responsive | small-selective vs loom | loom-responsive types | expansion-selective | best small-vs-loom |
+|---|---|---|---|---|---|
+| measured, v7 / v8 | 31 / 28 | 0 / 4 | 23 / 2 | 13 / 0 | 0.07 / 0.86 (DNp07) |
+| rewired_ipsi seed 0, v7 / v8 | 209 / 173 | 0 / 7 | 125 / 7 | 15 / 0 | - / - |
+| rewired_ipsi seed 1, v7 / v8 | 206 / 176 | 0 / 4 | 127 / 11 | 6 / 0 | - / - |
+| rewired seed 0, v7 / v8 | 84 / 63 | 0 / 0 | 34 / 0 | 8 / 0 | - / - |
+
+Size-tuned descending neurons appear: in the measured brain DNp07 at
+0.86, DNb05 at 0.52, DNg100 at 0.48 and DNg52 at 0.44 prefer the small
+disc to the loom. But two things say this is the front end and not the
+wiring. The within-hemisphere shuffles have as many such types (7 and 4),
+so the connectome adds nothing to what any side-preserving graph passes
+through; and every brain has lost its loom, from 23-127 loom-responsive
+types to 2-11 and from 6-15 expansion-selective types to none, because a
+front end that suppresses wide-field motion suppresses a loom before any
+wiring sees it. The fly does not pay that price: its loom detectors (LC4,
+LPLC2) take the un-opposed signal and its small-object detectors (LC11,
+LC18) the opposed one, on different columnar inputs.
+
+## The mixed map (v9)
+
+So the last version keeps v4's raw transients on the medulla ON and OFF
+channels that feed the loom pathway and puts the small-object channel
+(v8's computation) only on T2, T2a and T3, the columnar inputs of the
+lobula's small-object detectors. The question becomes the one the
+direction experiment answered: given the computed signal at the cells
+that carry it, does the measured wiring deliver it to particular
+descending neurons where a shuffle does not, and keep its loom?
+
+(results below)
+
 ## Kept
 
-v7 is in `INJECTION_MAPS` for the record, with its test
-(`tests/test_surround.py`). It is not used by any pilot.
+v7, v8 and v9 are in `INJECTION_MAPS` for the record, with tests
+(`tests/test_surround.py`). None is used by a pilot.

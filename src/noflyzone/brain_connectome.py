@@ -137,6 +137,19 @@ INJECTION_MAPS["v8"] = [
     ("Tm4", "off_wf", 2000.0), ("Tm9", "off_wf", 2000.0),
     ("T3", "onoff_wf", 3000.0),
 ]
+# v9: v4 with the small-object channel (v8's surround plus wide-field
+# opponency) only on T2, T2a and T3, the columnar cells that feed the
+# lobula's small-object detectors (LC11, LC18); the medulla ON/OFF channels
+# that feed the loom detectors keep their raw transients. Does the wiring
+# route the engineered small-object signal to specific descending neurons
+# while keeping its loom response? ENGINEERED.
+INJECTION_MAPS["v9"] = [
+    ("R1-6", "lum", MAX_PR_RATE),
+    ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+    ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+    ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+    ("T2", "onoff_wf", 3000.0), ("T2a", "onoff_wf", 3000.0), ("T3", "onoff_wf", 3000.0),
+]
 INJECTION_MAPS["v6"] = INJECTION_MAPS["v4"] + [
     ("T4a", "on_dir_px", 20000.0), ("T4b", "on_dir_mx", 20000.0),
     ("T4c", "on_dir_py", 20000.0), ("T4d", "on_dir_my", 20000.0),
