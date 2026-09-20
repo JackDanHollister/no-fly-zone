@@ -154,13 +154,20 @@ episodes on v9, against pool4 on v9 and pool4 on v4:
 | pool4 | v4 | 2.7 / 5.7 | 14 / 49 | 0.96 |
 | pool4 | v9 | 3.1 / 4.4 | 91 / 17 | 0.64 |
 | pool_v9 | v9 | 2.5 / 4.8 | 7 / 4 | 1.00 |
+| pool_v9, adaptive calibration | v9 | 3.1 / 6.4 | 16 / 8 | 0.94 |
+| pool4, adaptive calibration | v9 | 2.5 / 5.1 | 48 / 45 | 0.63 |
 
 Nothing to choose on kills with ten seeds. The small-object pools steer
 perfectly on the looks they take and take almost none (the engineered
 channel is quiet in the game: a tank against Battlezone's static ground
 crosses the gate on eleven looks in a thousand seconds); pool4 under v9
-takes many more looks and steers worse on the left. The engineered
-channel is a screen result, not yet a pilot.
+takes many more looks and steers worse on the left. Under the adaptive
+calibration, whose gate follows the pools' own range, the small-object
+pilot engages twice as often (24 gated looks), still steers 0.94
+correct, and kills 3.1 per 100 s, the joint best of any pilot here, at
+the cost of 6.4 deaths; ten seeds cannot separate these kill rates. The
+engineered channel is a screen result and a plausible pilot, not yet a
+better one.
 
 ## Kept
 
