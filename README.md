@@ -234,8 +234,11 @@ the female brain, so oviDN is read out under that name.
    position signal, not yaw flow; the yaw pilot's lower death rate is
    passivity (addendum in `docs/research/wiring-controls-2026-09-18.md`).
    Still open: a task that turns the fly, if motion steering is ever to be
-   tested; size tuning, still absent everywhere; the eye-render settings
-   fix.
+   tested; size tuning, still absent everywhere, and on 2026-09-20 an
+   engineered retinal surround (injection map v7) did not create it in
+   any brain, since a loom's edge passes a surround as well as a small
+   disc does (`docs/research/size-tuning-2026-09-20.md`); the eye-render
+   settings fix.
 5. Done 2026-09-18: MaleCNS v1.0 loader (`scripts/build_malecns.py`,
    `--dataset malecns`), used as a second individual for the controls.
    Done 2026-09-20: the male's own hex-column retinotopy, columns
@@ -255,7 +258,9 @@ the female brain, so oviDN is read out under that name.
    than its inputs, or a readout learned jointly with the synapses; a
    deliberate, labelled calyx-gain experiment if the mushroom body is ever
    to learn.
-7. M6, baseline done 2026-09-20 (`docs/architecture.md`, "Embodied mode").
+7. M6, baseline done 2026-09-20 (`docs/architecture.md`, "Embodied mode"):
+   on seed 0 the embodied pilot scores what the wired one scores (3000,
+   seven lives lost) through the physical levers, at 0.9x real time.
    Still open: contact-driven fire, the wings, and the VNC for the male.
 
 ## Architecture

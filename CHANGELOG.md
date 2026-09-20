@@ -14,7 +14,20 @@
   deck and a thousand times too heavy; the claws sat inside the knobs;
   MuJoCo 3.13 drops the claw contacts when the lever flags are in the XML.
   Gate `scripts/validate_embodied.py` passes; physics 32 ms per tick;
-  tests for the measured-lever action path and the seated fly.
+  tests for the measured-lever action path and the seated fly. A pushed
+  lever rests short of zero when released, so the readout has a 0.35 dead
+  zone and the legs push harder by 0.5 per unit of lever error (1.0
+  overshoots); with that, seed 0 embodied scores what wired scores (3000,
+  seven lives lost, the same action mix) at 0.9x real time.
+- Size tuning (`docs/research/size-tuning-2026-09-20.md`): injection map
+  v7, v4 with the medulla transients surround-antagonised at the retina
+  (radius 3, `surround_matrix`/`centre_surround`, labelled ENGINEERED),
+  gives no brain a descending type that prefers a small disc to a loom
+  (0 in the measured brain and in three rewirings, as with v4). What it
+  adds, small- and loom-versus-flash selectivity, appears in every brain
+  because a surround silences a uniform field. A loom's edge passes a
+  surround as well as a small disc; the front-end limit is not the
+  surround. Kept for the record, used by no pilot.
 
 - The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).
   Cause of the male's one-sidedness found: 13 of its 3,377 R1-6

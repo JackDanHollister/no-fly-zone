@@ -286,6 +286,13 @@ real time with the CUDA brain. A MuJoCo 3.13 quirk found on the way: with
 the levers' contact flags written in the XML on every geom of the body,
 the claw contacts vanished; set after compile they are kept.
 
+Played: on seed 0, 100 s, the embodied pilot scores 3000 with seven
+lives lost and the same action mix as the wired pilot (NOOP 1,335,
+DOWN 111, UP 20, FIRE 21 against 1,325 / 108 / 29 / 28), at 0.9x real
+time with physics at 36 ms per tick; the levers reached -0.75 to +1.0 of
+the push range. Before the proportional loop and the dead zone the fly
+held reverse for 940, then 1,399, of 1,500 ticks.
+
 Open: the wings droop (their joints are torque motors with zero command);
 the achieved lever angle is about a quarter of the IK target (servo gain
 against spring and contact), which the normalisation absorbs; contact
