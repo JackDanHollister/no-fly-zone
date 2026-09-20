@@ -8,8 +8,9 @@ licensed to drive.
 *Real time, seed 0, the measured FlyWire wiring with the corrections listed
 below. Left: the fly seated at the CRT, with the one she is fighting for
 pinned to the wall. Middle: Atari Battlezone. Right: 138,639 neurons, spikes
-glowing. Bottom: the descending neurons it is read out from; everything on the
-footer is a named, measured mapping.*
+glowing. Bottom: the descending neurons it is read out from, and, under the
+brain, what each eye sampled this tick, the two retinal mosaics with their
+transient energy; everything on the footer is a named, measured mapping.*
 
 **The complete FlyWire v783 female fruit-fly brain, 138,639 neurons and 15.1
 million synapses, spiking on a CUDA backend at five times real time, pilots
