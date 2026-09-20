@@ -211,10 +211,15 @@ the female brain, so oviDN is read out under that name.
    neurons; with the right eye mirrored (v6m) yaw optic flow gives 14
    descending types a direction-signed left/right difference (DNa02, DNp15,
    DNg41, ...), and `READOUT_MAPS["yaw"]` pilots on five of them (kills
-   2.4, dies 4.3 per 100 s against pool4's 2.2 and 5.9). Still open: a
-   motion-signed steering metric to score it; size tuning, still absent
-   everywhere; a live viewer with an eyes panel; the eye-render settings
-   fix.
+   2.4, dies 4.3 per 100 s against pool4's 2.2 and 5.9). Scored on
+   2026-09-20 with a motion-signed steering metric: the yaw pools cross
+   the steering gate on 2-4 look ticks per 1,000 s, because the fly turns
+   2-8 times an episode and a translating tank on static ground is a
+   position signal, not yaw flow; the yaw pilot's lower death rate is
+   passivity (addendum in `docs/research/wiring-controls-2026-09-18.md`).
+   Still open: a task that turns the fly, if motion steering is ever to be
+   tested; size tuning, still absent everywhere; a live viewer with an
+   eyes panel; the eye-render settings fix.
 5. Done 2026-09-18: MaleCNS v1.0 loader (`scripts/build_malecns.py`,
    `--dataset malecns`), used as a second individual for the controls.
    Still open: the male's own hex-column retinotopy in place of the PCA

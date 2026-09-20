@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 
 from noflyzone.brain_backend import BACKENDS, describe, make_brain
-from noflyzone.brain_connectome import ConnectomeBrain
+from noflyzone.brain_connectome import ConnectomeBrain, lattice_neighbours, reichardt
 from noflyzone.controls import CockpitControls
 from noflyzone.loop import PilotLoop
 
@@ -37,6 +37,11 @@ OUT = Path(__file__).resolve().parent.parent / "out"
 MOVES = ("UP", "DOWN", "LEFT", "RIGHT")
 TARGET_LI_MIN = 0.3   # retina transient energy must be this lateralised to count as a side
 TARGET_ENERGY_MIN = 0.5  # and this large in summed |delta luminance| units
+# motion-signed steering: the screen's horizontal motion on each look tick from a
+# Reichardt correlator over the hex lattice (both eyes), and whether the steer
+# sign matches it; the score a motion readout ("yaw") is meant to be judged by
+MOTION_LI_MIN = 0.3      # (rightward - leftward) / total correlator energy
+MOTION_ENERGY_MIN = 1e-4 # total correlator energy over ON and OFF transients, both eyes
 
 
 WARMUP_MIN, WARMUP_MAX = 15, 60
@@ -59,7 +64,12 @@ def run_one(loop, brain, args, calibration, condition, seed):
     acts, spiking, diffs, lrs, lives, fire = [], [], [], [], 0, 0
     # steering correctness: (target side, pool LI, steer gate crossed) per look tick
     events = []
+    # motion-signed: (screen motion sign, pool LI, gated) per look tick
+    motion_events = []
+    nb = lattice_neighbours(loop.retina.centers_xy)
+    m_tots, m_lis, e_lis = [], [], []
     prev_lum = None
+    prev_tr = None      # last tick's ON/OFF transients per eye, the correlator's delayed arm
     kills = 0
     t0 = time.time()
     for _ in range(args.steps):
@@ -75,9 +85,32 @@ def run_one(loop, brain, args, calibration, condition, seed):
         lum = {s: state["drives"][s][:, 0] for s in ("left", "right")}
         energy = {s: float(np.abs(lum[s] - prev_lum[s]).sum()) for s in lum} \
             if prev_lum is not None else {"left": 0.0, "right": 0.0}
+        # the same computation as injection map v6: ON and OFF transients,
+        # correlated with their own previous tick along +x and -x
+        tr = ({s: np.clip(lum[s] - prev_lum[s], 0.0, None) for s in lum},
+              {s: np.clip(prev_lum[s] - lum[s], 0.0, None) for s in lum}) \
+            if prev_lum is not None else None
+        e_right = e_left = 0.0
+        if tr is not None and prev_tr is not None:
+            for ch in (0, 1):
+                for s in lum:
+                    e_right += float(reichardt(tr[ch][s], prev_tr[ch][s], nb["px"]).sum())
+                    e_left += float(reichardt(tr[ch][s], prev_tr[ch][s], nb["mx"]).sum())
+        m_tot = e_right + e_left
+        m_li = (e_right - e_left) / m_tot if m_tot > 0 else 0.0
+        # convention check: the transient energy's horizontal centroid should
+        # move the way the correlator says
+        if tr is not None:
+            w = np.concatenate([tr[0][s] + tr[1][s] for s in ("left", "right")])
+            xs = np.concatenate([loop.retina.centers_xy[:, 0]] * 2)
+            cx = float((w * xs).sum() / w.sum()) if w.sum() > 0 else float("nan")
+        else:
+            cx = float("nan")
+        prev_tr = tr
         prev_lum = lum
         if state["episode_end"]:
             prev_lum = None
+            prev_tr = None
         if not loop.controls.suppressed:
             left, right = state["dn"]["DNa02_L"], state["dn"]["DNa02_R"]
             diffs.append(right - left)
@@ -85,28 +118,45 @@ def run_one(loop, brain, args, calibration, condition, seed):
                              - state["drives"]["left"][:, 0].mean()))
             e_tot = energy["left"] + energy["right"]
             e_li = (energy["right"] - energy["left"]) / e_tot if e_tot > 0 else 0.0
+            total = left + right
+            pool_li = (right - left) / total if total > 0 else 0.0
+            gated = total >= loop.controls.steer_min_hz
             if e_tot >= TARGET_ENERGY_MIN and abs(e_li) >= TARGET_LI_MIN:
-                total = left + right
-                pool_li = (right - left) / total if total > 0 else 0.0
-                gated = total >= loop.controls.steer_min_hz
                 events.append((np.sign(e_li), pool_li, gated))
+            if m_tot >= MOTION_ENERGY_MIN and abs(m_li) >= MOTION_LI_MIN:
+                motion_events.append((np.sign(m_li), pool_li, gated))
+            m_tots.append(m_tot); m_lis.append(m_li); e_lis.append(cx)
     c = Counter(acts)
     diffs, lrs = np.array(diffs), np.array(lrs)
     act_mask = np.abs(diffs) > 0
     corr = float(np.corrcoef(diffs[act_mask], lrs[act_mask])[0, 1]) if act_mask.sum() > 3 else float("nan")
     steer = steering_summary(events)
+    motion = {f"motion_{k}": v for k, v in steering_summary(motion_events).items()}
+    m_lis, e_lis, m_tots = np.array(m_lis), np.array(e_lis), np.array(m_tots)
+    d_eli = np.diff(e_lis, prepend=e_lis[:1]) if e_lis.size else e_lis
+    mv = (m_tots >= MOTION_ENERGY_MIN) & np.isfinite(d_eli)
+    motion["motion_convention_corr"] = (float(np.corrcoef(m_lis[mv], d_eli[mv])[0, 1])
+                                        if mv.sum() > 3 and m_lis[mv].std() > 0 and d_eli[mv].std() > 0 else float("nan"))
+    motion["motion_energy_p50_p90"] = [float(np.percentile(m_tots, 50)), float(np.percentile(m_tots, 90)),
+                                       float(np.percentile(m_tots, 99))] if m_tots.size else [0.0, 0.0, 0.0]
     row = {"condition": condition, "seed": seed, "reward": float(loop.total_reward),
            "kills": kills, "lives_lost": lives, "fire_ticks": fire,
            "moves": sum(v for k, v in c.items() if any(m in k for m in MOVES)),
            "turns": sum(v for k, v in c.items() if "LEFT" in k or "RIGHT" in k),
            "noop": c.get("NOOP", 0), "mean_spiking": float(np.mean(spiking)) if spiking else float("nan"),
            "steer_active_ticks": int(act_mask.sum()), "steer_lr_corr": corr,
-           "warmup_ticks": warmup, "wall_s": time.time() - t0, "actions": dict(c), **steer}
+           "warmup_ticks": warmup, "wall_s": time.time() - t0, "actions": dict(c), **steer, **motion,
+           "motion_events": [(float(a), float(b), bool(c)) for a, b, c in motion_events]}
     print(f"  {condition:16s} seed {seed}: kills {kills:2d} lives-lost {lives} fire {fire:3d} "
           f"moves {row['moves']:3d} turns {row['turns']:3d} "
           f"spiking/tick {row['mean_spiking']:6.0f} | targets L/R {steer['targets_left']:3d}/{steer['targets_right']:3d} "
           f"responded {steer['responded_frac']:.2f} correct L/R {steer['correct_left']:.2f}/{steer['correct_right']:.2f} "
           f"balanced {steer['balanced_acc']:.2f} li-corr {steer['li_corr']:+.2f} ({row['wall_s']:.0f} s)", flush=True)
+    print(f"  {'':16s}         motion L/R {motion['motion_targets_left']:3d}/{motion['motion_targets_right']:3d} "
+          f"correct L/R {motion['motion_correct_left']:.2f}/{motion['motion_correct_right']:.2f} "
+          f"balanced {motion['motion_balanced_acc']:.2f} li-corr {motion['motion_li_corr']:+.2f} "
+          f"convention {motion['motion_convention_corr']:+.2f} energy p50/p90/p99 "
+          f"{motion['motion_energy_p50_p90'][0]:.2e}/{motion['motion_energy_p50_p90'][1]:.2e}/{motion['motion_energy_p50_p90'][2]:.2e}", flush=True)
     return row
 
 
@@ -166,6 +216,9 @@ def main() -> None:
                     help="independent rewirings; each becomes its own rewired condition")
     ap.add_argument("--rewired-scales", type=float, nargs="+", default=[1.0],
                     help="weight scales for the rewired brain (gain-matched controls)")
+    ap.add_argument("--calibration", default=None,
+                    help="controller calibration for every condition (default: the condition's readout); "
+                         "'adaptive' scales spans and the steer gate to each pool's own running peak")
     ap.add_argument("--out", default="bench_pilots.json")
     args = ap.parse_args()
     # condition tokens: name[@ablate_seed][xweight_scale][:readout]; a bare
@@ -206,7 +259,7 @@ def main() -> None:
             else:
                 brain = ConnectomeBrain(retina=loop.retina, brain=core,
                                         injection=args.injection, readout=readout)
-                calibration = readout
+                calibration = args.calibration or readout
             rows.append(run_one(loop, brain, args, calibration, cond, seed))
             loop.close()
     print("\nmeans over seeds")
@@ -227,6 +280,14 @@ def main() -> None:
         pooled_bal = float(np.mean([pooled["L"][0], pooled["R"][0]]))
         print(f"  {cond:16s} pooled gated events L {pooled['L'][1]:3d} R {pooled['R'][1]:3d}: "
               f"correct L {pooled['L'][0]:.2f} R {pooled['R'][0]:.2f} balanced {pooled_bal:.2f}")
+        mev = [e for r in rs for e in r["motion_events"] if e[2]]
+        mp = {}
+        for name, sgn in (("L", -1), ("R", 1)):
+            k = [e for e in mev if e[0] == sgn]
+            mp[name] = (sum(np.sign(e[1]) == sgn for e in k) / len(k) if k else float("nan"), len(k))
+        print(f"  {cond:16s} pooled motion-gated events L {mp['L'][1]:3d} R {mp['R'][1]:3d}: "
+              f"steer with motion L {mp['L'][0]:.2f} R {mp['R'][0]:.2f} "
+              f"balanced {float(np.mean([mp['L'][0], mp['R'][0]])):.2f}  convention {m('motion_convention_corr'):+.2f}")
         print(f"  {cond:16s} kills {m('kills'):4.1f}  lives-lost {m('lives_lost'):.1f}  fire {m('fire_ticks'):5.1f}  "
               f"moves {m('moves'):5.1f}  turns {m('turns'):4.1f}  spiking/tick {m('mean_spiking'):6.0f}  "
               f"| targets/ep {(m('targets_left') + m('targets_right')):5.1f} responded {m('responded_frac'):.2f}  "

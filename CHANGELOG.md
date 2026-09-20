@@ -2,6 +2,17 @@
 
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
+- `bench_pilots.py`: a motion-signed steering metric (retinal Reichardt
+  correlator over ON/OFF transients, both eyes; steer sign against motion
+  sign on gated look ticks, with a centroid convention check) and
+  `--calibration`. Ten seeds on v6m: the position pilot steers with the
+  motion sign on 0.62-0.69 of its motion events; the yaw pilot's pools
+  cross the gate on 2-4 ticks per 1,000 s under either calibration,
+  because the fly turns 2-8 times per episode and Battlezone gives a
+  translating target on a static ground, not yaw flow. Its lower death
+  rate is passivity, not motion steering
+  (`docs/research/wiring-controls-2026-09-18.md`, addendum).
+
 - README, `pyproject.toml` and `CITATION.cff` brought to publication state:
   tests directory and MaleCNS loader no longer listed as missing, data
   licences corrected (FlyWire v783 is CC-BY 4.0, Zenodo 10676866), package

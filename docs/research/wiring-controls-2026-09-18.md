@@ -491,3 +491,47 @@ drive, including a loom-specific signal, onto a specific few of them, and
 neither a whole-brain nor a within-hemisphere random graph does either.
 The same holds in a second individual, MaleCNS, at matched firing regime,
 with the same cells (DNg100, DNp12, DNp07) carrying the same signals.
+
+
+## Addendum 2026-09-20: the motion-signed steering metric, and what it says about the yaw pilot
+
+`bench_pilots.py` now scores steering against the screen's motion as well
+as the target's side. On every unsuppressed look tick the ON and OFF
+transients of both retinas are correlated with their own previous tick
+along +x and -x over the hex lattice (the computation of injection map
+v6, done on the retina rather than in the brain), and a tick counts as a
+motion event when the summed correlator energy is above 1e-4 and its
+(rightward - leftward) / total is at least 0.3 in magnitude. A gated
+event is one where the pilot's steer pools also cross the steering gate;
+"steer with motion" is the fraction of gated events whose steer sign
+matches the motion sign, balanced over the two directions. A convention
+check correlates the correlator's sign with the movement of the transient
+energy's horizontal centroid (positive in every run, +0.16 to +0.44).
+
+Ten 100 s episodes on v6m, seeds 0-9:
+
+| pilot | calibration | position-gated events (L / R) | steer toward target | motion-gated events (L / R) | steer with motion | kills / lives lost per 100 s |
+|---|---|---|---|---|---|---|
+| pool4 (position) | pool4 | 17 / 32 | 1.00 | 6 / 9 | 0.69 | 2.7 / 6.0 |
+| pool4 (position) | adaptive | 12 / 35 | 1.00 | 6 / 15 | 0.62 | 2.6 / 6.0 |
+| yaw (motion) | pool4 | 0 / 0 | - | 1 / 1 | 0.50 | 2.6 / 4.6 |
+| yaw (motion) | adaptive | 3 / 0 | - | 2 / 2 | 0.75 | 2.4 / 5.1 |
+| rewired_ipsi, yaw pools | pool4 | 1 / 28 | 0.00 | 5 / 15 | 0.50 | 1.0 / 5.5 |
+
+The metric works: the position pilot, which was never told about motion,
+steers with it on about two thirds of its motion events, because a tank
+that has just appeared on one side is also moving on that side. But the
+yaw pilot cannot be scored by it, for a reason that is now measured
+rather than suspected: its steer pools cross the gate on two to four look
+ticks per thousand seconds of play, whether the gate is the fixed 8 Hz or
+the adaptive one that follows the pools' own range. The game gives them
+nothing to respond to. The fly turns two to eight times per episode, so
+there is almost no yaw optic flow at its retina, and a translating tank
+on a static ground is a position signal, not a flow field. The yaw
+pilot's 2.4 kills and 4.6-5.1 deaths against pool4's 2.7 and 6.0 are the
+numbers of a pilot that moves less (108 against 139 moves per episode),
+not of one that steers by motion. The 2026-09-18 result stands as it was
+stated, a direction-signed left/right difference in the descending
+neurons under yaw optic flow on the probe; in Battlezone that flow does
+not occur, and no readout of it can be tested here without a task that
+turns the fly.
