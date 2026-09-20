@@ -46,7 +46,9 @@
   measured brain (0.84 kills, 1.99 lives against 0.85, 1.90). The latch
   turns a rule that harmed six brains of six into one that on average
   does no harm; it does not yet help. The rule potentiates the steer,
-  drive and escape inputs. `scripts/probe_shell.py`
+  drive and escape inputs. A second held-out set (games 800-803) repeats
+  the per-seed pattern exactly, two brains better and two worse on both
+  sets: four different brains, not noise; pooled, the measured brain. `scripts/probe_shell.py`
   and a window sweep: the shell is smaller than one ommatidium until it
   is nearly home, at any window that covers its path; only a window aimed
   low catches it in one hit of four, over the last eight ticks. The hit
