@@ -250,18 +250,106 @@ def _pca2d(pos: np.ndarray) -> np.ndarray:
     return uv / np.abs(uv).max(axis=0)
 
 
+def hex_to_plane(h1: np.ndarray, h2: np.ndarray) -> np.ndarray:
+    """Axial hex-column coordinates -> points on a hex lattice in the plane.
+    Any axial basis of the lattice gives the same point set up to an
+    isometry, which place_cells() fits afterwards, so the annotation's
+    convention need not be known."""
+    h1 = np.asarray(h1, np.float64); h2 = np.asarray(h2, np.float64)
+    return np.stack([np.sqrt(3.0) * (h1 + h2 / 2.0), 1.5 * h2], axis=1)
+
+
+def place_cells(pos: np.ndarray, hex1=None, hex2=None, retinotopy: str = "auto") -> tuple[np.ndarray, int]:
+    """2D retinotopic coordinates in [-1, 1]^2 for one (type, side) population.
+    Cells with a hex column (MaleCNS assignedOlHex1/2) are placed by column
+    identity, on a hex lattice aligned to the type's soma-position PCA frame
+    by an orthogonal Procrustes fit (rotation or reflection), so the axes
+    keep the PCA convention (x lateral, y vertical) and cells without a
+    column, placed by PCA, share the frame. Returns (uv, n_placed_by_hex).
+    retinotopy="pca" ignores the columns (the 2026-09-18 behaviour)."""
+    pos = np.asarray(pos, float)
+    has_pos = np.isfinite(pos).all(axis=1)
+    uv = np.full((len(pos), 2), np.nan)
+    if has_pos.sum() >= 3:
+        uv[has_pos] = _pca2d(pos[has_pos])
+    if retinotopy == "pca" or hex1 is None:
+        return uv, 0
+    hexed = np.isfinite(np.asarray(hex1, float)) & np.isfinite(np.asarray(hex2, float))
+    n_hex = int(hexed.sum())
+    if n_hex < 3:
+        return uv, 0
+    xy = hex_to_plane(np.asarray(hex1, float)[hexed], np.asarray(hex2, float)[hexed])
+    a = xy - xy.mean(axis=0)
+    both = hexed & has_pos
+    if both.sum() >= 3:
+        # orient the lattice to the soma frame with an orthogonal fit
+        b = uv[both] - uv[both].mean(axis=0)
+        ab = xy[both[hexed]] - xy[both[hexed]].mean(axis=0)
+        u, _, vt = np.linalg.svd(ab.T @ b)
+        a = a @ (u @ vt)
+    aligned = a / np.abs(a).max(axis=0)
+    out = uv.copy()
+    out[hexed] = aligned
+    return out, n_hex
+
+
+def inherit_hex(W, hex1: np.ndarray, hex2: np.ndarray, side: np.ndarray,
+                cells: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
+    """Give cells without a hex column the synapse-weighted majority column
+    of their same-side partners (inputs and outputs) that have one. In the
+    fly a column is defined by its connectivity, so a photoreceptor whose
+    soma lies outside the volume (MaleCNS: 13 of 3,377 R1-6 have a
+    position) is placed at the lamina column it drives. W is CSC with
+    columns = presynaptic cells. Returns (hex1, hex2, n_inherited)."""
+    hex1 = np.array(hex1, float); hex2 = np.array(hex2, float)
+    has = np.isfinite(hex1) & np.isfinite(hex2)
+    csc = W.tocsc(); csr = W.tocsr()
+    n_done = 0
+    for i in cells:
+        if has[i]:
+            continue
+        votes: dict[tuple[float, float], float] = {}
+        for mat, sl in ((csc, slice(csc.indptr[i], csc.indptr[i + 1])),     # outputs
+                        (csr, slice(csr.indptr[i], csr.indptr[i + 1]))):    # inputs
+            partners, w = mat.indices[sl], np.abs(mat.data[sl])
+            for j, wj in zip(partners, w):
+                if has[j] and side[j] == side[i] and wj > 0:
+                    k = (hex1[j], hex2[j]); votes[k] = votes.get(k, 0.0) + float(wj)
+        if votes:
+            hex1[i], hex2[i] = max(votes.items(), key=lambda kv: kv[1])[0]
+            n_done += 1
+    return hex1, hex2, n_done
+
+
 class ConnectomeBrain:
     def __init__(self, retina, brain: ShiuBrain | None = None, seed: int = 0,
                  injection: str = "v0", readout: str = "v0",
-                 extra_sites: dict[str, np.ndarray] | None = None):
+                 extra_sites: dict[str, np.ndarray] | None = None,
+                 retinotopy: str = "auto"):
         """extra_sites: name -> brain indices to add to the Poisson activation
         set with their own rate slots (e.g. dopamine neurons as teaching
-        signals); set them per tick with set_extra_rate()."""
+        signals); set them per tick with set_extra_rate(). retinotopy:
+        "auto" places cells by hex column where the annotation has one
+        (MaleCNS), else by soma-position PCA; "pca" always PCA."""
         self.brain = brain if brain is not None else ShiuBrain(seed=seed)
         self.injection = injection
         self.sites = INJECTION_MAPS[injection]
         self.readout = readout
+        self.retinotopy = retinotopy
+        self.retinotopy_counts = {"hex": 0, "pca": 0, "inherited": 0}
         ann = self.brain.annotations()
+        has_hex = "hex1" in ann.columns and "hex2" in ann.columns and retinotopy != "pca"
+        if has_hex:
+            # columns for the injected cells that lack one, from their partners
+            ann = ann.drop_duplicates("root_id").set_index("root_id").reindex(self.brain.root_ids)
+            h1 = ann["hex1"].to_numpy(float); h2 = ann["hex2"].to_numpy(float)
+            sides = ann["side"].fillna("").astype(str).to_numpy()
+            types = ann["cell_type"].fillna("").astype(str).to_numpy()
+            wanted = np.flatnonzero(np.isin(types, [t for t, _, _ in self.sites]))
+            h1, h2, n_inh = inherit_hex(self.brain.W, h1, h2, sides, wanted)
+            self.retinotopy_counts["inherited"] = n_inh
+            hex_of = dict(zip(self.brain.root_ids.tolist(), zip(h1.tolist(), h2.tolist())))
+            ann = self.brain.annotations()
 
         # retinotopic injection map: per (population, eye)
         self._pops: list[tuple[str, float, slice, np.ndarray, str]] = []
@@ -274,13 +362,25 @@ class ConnectomeBrain:
                            & (ann["side"] == side)]
                 ids = rows["root_id"].to_numpy(np.int64)
                 pos = rows[["pos_x", "pos_y", "pos_z"]].to_numpy(float)
-                # cells without a position cannot be placed on the retina
-                keep = np.array([int(r) in self.brain.index_of for r in ids]) \
-                    & np.isfinite(pos).all(axis=1)
+                in_brain = np.array([int(r) in self.brain.index_of for r in ids])
+                if has_hex:
+                    hx = np.array([hex_of.get(int(r), (np.nan, np.nan)) for r in ids], float).reshape(-1, 2)
+                    # a cell is placeable with a position or a (possibly inherited) column
+                    keep = in_brain & (np.isfinite(pos).all(axis=1) | np.isfinite(hx).all(axis=1))
+                    hx = hx[keep]
+                else:
+                    # cells without a position cannot be placed on the retina
+                    keep = in_brain & np.isfinite(pos).all(axis=1)
                 ids, pos = ids[keep], pos[keep]
                 bidx = np.array([self.brain.index_of[int(r)] for r in ids],
                                 dtype=np.int64)
-                omm = tree.query(_pca2d(pos))[1]
+                if has_hex:
+                    uv, n_hex = place_cells(pos, hx[:, 0], hx[:, 1], retinotopy)
+                else:
+                    uv, n_hex = _pca2d(pos), 0
+                self.retinotopy_counts["hex"] += n_hex
+                self.retinotopy_counts["pca"] += len(bidx) - n_hex
+                omm = tree.query(uv)[1]
                 self._pops.append((mode, gain,
                                    slice(start, start + len(bidx)), omm, side))
                 chunks.append(bidx)
@@ -333,8 +433,11 @@ class ConnectomeBrain:
             pops[f"{ct}/{side}"] = sl.stop - sl.start
         ro = {k: len(v) for k, v in self._readout.items()}
         ro.update({k: f"{v[0]}{v[1]}" for k, v in self._derived.items()})
+        rc = self.retinotopy_counts
+        placed = (f", retinotopy hex-column {rc['hex']} cells ({rc['inherited']} by partners) / PCA {rc['pca']}"
+                  if rc["hex"] else "")
         return (f"injection map {self.injection} {pops}, "
-                f"readout map {self.readout} {ro}")
+                f"readout map {self.readout} {ro}{placed}")
 
     def _register(self) -> None:
         self.brain.set_poisson({int(i): 0.0 for i in self._pr_all})
