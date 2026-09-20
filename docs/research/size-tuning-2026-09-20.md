@@ -167,7 +167,11 @@ pilot engages twice as often (24 gated looks), still steers 0.94
 correct, and kills 3.1 per 100 s, the joint best of any pilot here, at
 the cost of 6.4 deaths; ten seeds cannot separate these kill rates. The
 engineered channel is a screen result and a plausible pilot, not yet a
-better one.
+better one. Twenty seeds under the adaptive calibration settle it:
+`pool_v9` kills 2.75 ± 0.27 per 100 s against pool4's 2.40 ± 0.18 on the
+same front end, no difference, and dies 6.60 ± 0.30 against 5.25 ± 0.36,
+more. Its steering is perfect (25 of 25 gated looks in the second block)
+and rare. It stays a named alternative.
 
 ## Kept
 

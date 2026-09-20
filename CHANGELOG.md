@@ -80,9 +80,9 @@
   screened under v9, steer perfectly on the looks they take and take
   almost none in the game (2.5 kills / 4.8 deaths against pool4's
   2.7 / 5.7 on v4 and 3.1 / 4.4 on v9; ten seeds, nothing to choose);
-  under the adaptive calibration they engage twice as often and kill 3.1
-  per 100 s at 6.4 deaths, steering 0.94. Maps kept, no pilot uses them
-  by default.
+  under the adaptive calibration, twenty seeds: 2.75 ± 0.27 kills against
+  pool4's 2.40 ± 0.18, no difference, and 6.60 against 5.25 deaths, more;
+  steering perfect and rare. Maps kept, no pilot uses them by default.
 
 - The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).
   Cause of the male's one-sidedness found: 13 of its 3,377 R1-6
