@@ -71,7 +71,7 @@ controls drive the game. Fly → cockpit → tank → robot war.
 
 ## Status
 
-Last audited 2026-09-14 against the code, not the commit messages.
+Last audited 2026-09-20 against the code, not the commit messages.
 
 The wired pipeline is complete end to end: game → CRT texture → eye renders →
 hex retina → brain → descending-neuron rates → levers → ALE action. Two brains
@@ -169,7 +169,7 @@ degrees, and the earlier one-seed hint that it was does not replicate.
 
 | Milestone | State | Note |
 |---|---|---|
-| M0 scaffold, smoke scripts | done | The smoke "tests" are scripts, not pytest; there is no `tests/` directory. |
+| M0 scaffold, smoke scripts | done | Smoke scripts plus a `tests/` pytest suite (17 tests; the brain gates, controls, correlator, MaleCNS loader and plasticity sets are marked `data`/`cuda` and skip without them). |
 | M1 game frame → CRT texture → eye camera | done | The orientation gate guards vertical flips only. |
 | M2 closed loop with the reflex stub | done | Levers are a kinematic puppet derived from the action, not causal. |
 | M2.5 flybody seated in the cockpit | done | Kinematic attach; eye cameras are world-fixed at head height; silent fallback to the bare cockpit. |
@@ -186,17 +186,15 @@ the female brain, so oviDN is read out under that name.
 ## Next Steps
 
 1. Done 2026-09-14: the whole ladder passes on the workstation with the
-   versions recorded under Machines. Still open: pin `mujoco`, `ale-py` and
-   `gymnasium` in `pyproject.toml` once the Mac confirms the same versions.
+   versions recorded under Machines; `constraints.txt` pins the exact set.
 2. Done 2026-09-14: the CUDA brain backend. Still open there: a live viewer
-   that uses the headroom, and a `tests/` directory wrapping
-   `compare_backends.py` and the smoke gates under pytest.
+   that uses the headroom (the `tests/` suite now wraps the gates and the
+   CPU/CUDA equivalence).
 3. Done 2026-09-14 in spirit: cascade probes, DN audit and screen, `--ablate`
    controls, idle scan off, pooled readouts, `bench_pilots.py`
    (`docs/research/cascade-probe-2026-09-14.md`). Still open: DN calibration
    from measured closed-loop distributions (the `pool4` spans are
-   provisional), a `tests/` directory, and a provenance hash on every
-   artefact.
+   provisional) and a provenance hash on every artefact.
 4. Done 2026-09-18: longer episodes, a balanced left/right steering
    metric, a gain-matched rewired control, three rewiring seeds and a
    within-hemisphere control (`docs/research/wiring-controls-2026-09-18.md`).
@@ -330,8 +328,8 @@ stay on the main thread).
 
 ## Data & reference implementations
 
-- MaleCNS v1.0 (Janelia/Google, CC-BY): https://male-cns.janelia.org — planned,
-  no loader yet
+- MaleCNS v1.0 (Janelia/Google, CC-BY): https://male-cns.janelia.org —
+  loaded by `scripts/build_malecns.py` and `--dataset malecns`
 - FlyWire v783 dump (CC-BY, no login): https://zenodo.org/records/10676866 —
   the code loads v783 from the Shiu model repository instead of this dump
 - LIF parameters: Shiu et al., Nature 634:210 (2024) — github.com/philshiu/Drosophila_brain_model
@@ -342,10 +340,12 @@ stay on the main thread).
 ## Licence and data
 
 Code: MIT (see `LICENSE`). The data this fetches is not in the repository and
-carries its own terms: the Shiu et al. brain model and connectivity are MIT;
-FlyWire v783 is CC-BY-NC 4.0; the flywire annotations are from the Jefferis
-lab; the flybody model is Apache-2.0 from MuJoCo Menagerie; the Atari ROM
-ships legally inside `ale-py`.
+carries its own terms: the Shiu et al. brain model code is MIT; the FlyWire
+v783 connectivity it carries is CC-BY 4.0 (Zenodo record 10676866, Dorkenwald
+et al. 2024, and cite the FlyWire papers if you use it); the cell-type
+annotations are from Schlegel et al. 2024 (CC-BY 4.0); MaleCNS v1.0 is CC-BY
+4.0 from Janelia; the flybody model is Apache-2.0 from MuJoCo Menagerie; the
+Atari ROM ships legally inside `ale-py`.
 
 ## Running it
 
