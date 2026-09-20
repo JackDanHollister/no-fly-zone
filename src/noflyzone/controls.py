@@ -72,6 +72,7 @@ class CockpitControls:
         # [-1, 1]; when set, the action and the treads come from these, not
         # from the intended steer/throttle above
         self.measured: tuple[float, float] | None = None
+        self.fire_measured: bool | None = None   # embodied: the button's own state
         # physical levers do not return all the way: after a push they rest
         # 0.15-0.26 of the push range from zero (measured 2026-09-20), so the
         # measured values pass through a dead zone, as a joystick's do
@@ -163,6 +164,7 @@ class CockpitControls:
         name = "".join(parts) or "NOOP"
         if parts and self.saccade_hold > 0:
             self._hold = self.saccade_hold  # we are about to move: look away
-        if self.fire:
+        fire = self.fire if self.fire_measured is None else self.fire_measured
+        if fire:
             name = "FIRE" if name == "NOOP" else name + "FIRE"
         return self._action_id.get(name, self._action_id["NOOP"])

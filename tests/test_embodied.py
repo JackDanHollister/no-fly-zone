@@ -27,6 +27,11 @@ def test_measured_levers_drive_the_action_not_the_intent():
     assert ACTIONS[c.to_action()] == "RIGHT"
     c.measured = (-0.25, -0.2)                     # the resting hysteresis is not a command
     assert c.effective == (0.0, 0.0) and ACTIONS[c.to_action()] == "NOOP"
+    c.fire = True                                  # the intent to fire is not a shot
+    c.fire_measured = False                        # until the button is pressed
+    assert ACTIONS[c.to_action()] == "NOOP"
+    c.fire_measured = True
+    assert ACTIONS[c.to_action()] == "FIRE"
 
 
 @pytest.mark.skipif(not FLY_XML.exists(), reason="flybody assets not fetched")
@@ -42,4 +47,14 @@ def test_seated_fly_moves_the_physical_levers():
     assert turn[0] < -0.4 and turn[1] > 0.4
     assert np.abs(c.data.qvel).max() < 50                   # no chatter
     assert c.lever_contacts()["left"] > 0 and c.lever_contacts()["right"] > 0
+    # the proboscis presses the button and lets it go
+    assert c.fire_pressed() < 0.2
+    c.set_fire_intent(True)
+    for _ in range(6):
+        c.step_physics(1 / 15)
+    assert c.fire_pressed() >= 0.35
+    c.set_fire_intent(False)
+    for _ in range(6):
+        c.step_physics(1 / 15)
+    assert c.fire_pressed() < 0.2
     c.close()

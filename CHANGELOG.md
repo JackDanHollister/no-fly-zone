@@ -18,7 +18,13 @@
   lever rests short of zero when released, so the readout has a 0.35 dead
   zone and the legs push harder by 0.5 per unit of lever error (1.0
   overshoots); with that, seed 0 embodied scores what wired scores (3000,
-  seven lives lost, the same action mix) at 0.9x real time.
+  seven lives lost, the same action mix) at 0.9x real time. Fire made
+  physical: the button is a sprung slide under the extended proboscis,
+  touched only by the rostrum, haustellum and labrum; the fire intent
+  extends the proboscis and the shot is the button at 0.35 of its travel
+  (rest 0.08, pressed 0.57; the first spring was a thousand times weaker
+  than gravity on the button). The wings are held at the stance by a
+  spring. The gate covers the button.
 - Size tuning (`docs/research/size-tuning-2026-09-20.md`): injection map
   v7, v4 with the medulla transients surround-antagonised at the retina
   (radius 3, `surround_matrix`/`centre_surround`, labelled ENGINEERED),

@@ -16,7 +16,7 @@ from collections import defaultdict
 import numpy as np
 
 from .controls import CockpitControls
-from .cockpit import Cockpit
+from .cockpit import FIRE_PRESSED, Cockpit
 from .game import BattleZone
 from .retina import HexRetina
 
@@ -109,9 +109,10 @@ class PilotLoop:
             # move as far as the legs push them; the action reads the levers
             c = self.controls
             self.cockpit.set_lever_targets(c.throttle - c.steer, c.throttle + c.steer)
+            self.cockpit.set_fire_intent(c.fire)
             self._timed("physics", self.cockpit.step_physics, self.dt)
             c.measured = self.cockpit.lever_values()
-            self.cockpit.set_controls(0.0, 0.0, c.fire)   # fire button only
+            c.fire_measured = self.cockpit.fire_pressed() >= FIRE_PRESSED
         else:
             self.cockpit.set_controls(self.controls.lever_left,
                                       self.controls.lever_right,

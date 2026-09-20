@@ -275,8 +275,15 @@ physical and what is not, in order of the loop:
    servo; the return spring does not change it) and without the dead zone
    that rest sat on the reverse threshold and the fly backed up for 940 of
    1,500 ticks. The treads on the dashboard show the physical levers.
-5. The fire button stays puppeted from the DN drive; contact-driven fire
-   (a leg or the proboscis on the button) is open.
+5. Fire is physical too: the button is a sprung slide placed where the
+   fully extended proboscis reaches (1 mm into the tip's path, spring
+   8 against a gravity load of 0.005 and a servo of 0.1), colliding only
+   with the rostrum, haustellum and labrum geoms; the fire intent
+   extends the rostrum and haustellum to their limits and the shot is
+   taken when the button reads 0.35 of its travel (rest 0.08, pressed
+   0.57). The fly fires by extending its proboscis onto the button. The
+   wings, whose joints are torque motors with no command, are held at the
+   stance by a weak spring.
 
 Measured: the gate `scripts/validate_embodied.py` moves the levers to
 +1.0 forward, -0.7 back, and (+0.9, -0.7) for a turn, with the claws in
@@ -293,7 +300,6 @@ time with physics at 36 ms per tick; the levers reached -0.75 to +1.0 of
 the push range. Before the proportional loop and the dead zone the fly
 held reverse for 940, then 1,399, of 1,500 ticks.
 
-Open: the wings droop (their joints are torque motors with zero command);
-the achieved lever angle is about a quarter of the IK target (servo gain
-against spring and contact), which the normalisation absorbs; contact
-fire; the VNC for the male.
+Open: the achieved lever angle is about a quarter of the IK target (servo
+gain against spring and contact), which the normalisation absorbs; the
+VNC for the male; the fly's hind legs do nothing.

@@ -192,7 +192,7 @@ degrees, and the earlier one-seed hint that it was does not replicate.
 | M3 whole-brain LIF core, validated | done | Gates are qualitative (MN9 > 5 Hz, any giant-fibre spike), single seed. CPU (SciPy) and CUDA (Triton) backends agree. MaleCNS v1.0 loads through the same path (`--dataset malecns`); its giant-fibre gate passes, its sugar gate cannot be run (no labelled sugar GRNs), and it needs weights x0.6 to sit in FlyWire's firing regime. |
 | M4 connectome pilots in wired mode, dashboard | partial | Idle scan now off by default and labelled when on; pooled readouts, saccadic gating and LI steering give event-driven play with real turns and kills; the wiring is shown to carry target side to the descending neurons where a whole-brain rewiring does not, but a within-hemisphere rewiring also keeps it; eyes panel (the two retinal mosaics and their transient energy) on the dashboard, and `run_m3.py --live` shows it in a window as the fly plays (2026-09-20). |
 | M5 cockpit art pass | partial | Neon, lighting, set dressing and decals done; the screen is a flat box showing the raw frame; the single damage lamp sits about 35° above the eye cameras' axis, so the retina never sees it. |
-| M6 embodied mode, contact-driven controls | baseline done | `run_m3.py --pilot embodied` (2026-09-20): the flybody's own leg servos, driven by inverse kinematics from the descending neurons' intent, push fly-scale physical levers with adhering claws; the action reads the levers. Gate `scripts/validate_embodied.py`. About real time. Fire still puppeted; wings droop. |
+| M6 embodied mode, contact-driven controls | baseline done | `run_m3.py --pilot embodied` (2026-09-20): the flybody's own leg servos, driven by inverse kinematics from the descending neurons' intent, push fly-scale physical levers with adhering claws, and the proboscis presses a sprung fire button; the action reads the levers and the button. Gate `scripts/validate_embodied.py`. About real time. |
 | M7 learning and showcase video | partial | Batched brain, PPO readout trainer, three-factor plasticity on the mushroom body and on the descending neurons' inputs, with LR-zero and shuffled controls and a frozen test on unseen games. Readouts learn survival, not kills; the mushroom body cannot see the game; the descending-input rule changes behaviour reproducibly and for the worse. Learned brains and live learning play in `run_m3.py`, labelled. No showcase cut. |
 
 Doc-versus-code gaps are listed in `docs/architecture.md` under "Status audit".
@@ -261,7 +261,8 @@ the female brain, so oviDN is read out under that name.
 7. M6, baseline done 2026-09-20 (`docs/architecture.md`, "Embodied mode"):
    on seed 0 the embodied pilot scores what the wired one scores (3000,
    seven lives lost) through the physical levers, at 0.9x real time.
-   Still open: contact-driven fire, the wings, and the VNC for the male.
+   Contact-driven fire (the proboscis on the button) and the wings done
+   the same day. Still open: the VNC for the male.
 
 ## Architecture
 

@@ -58,6 +58,16 @@ FLY_OPTION = ('<option timestep="0.0001" gravity="0 0 -981" density="0.00128" '
 T1_JOINTS = ("coxa_abduct_T1", "coxa_twist_T1", "coxa_T1", "femur_twist_T1",
              "femur_T1", "tibia_T1", "tarsus_T1")
 KNOB_LEN, KNOB_R = 0.09, 0.013
+# embodied fire: the proboscis, fully extended (rostrum and haustellum at
+# their lower limits), reaches (0, 0.051, -0.019) at the stance; the button
+# sits so that the extension presses it by most of its travel
+FIRE_POS = (0.0, 0.051, -0.019 - 0.006 + 0.001)   # top 1 mm into the extended tip's path
+FIRE_TRAVEL = 0.008
+FIRE_STIFFNESS = 8.0    # gravity on the button is 0.005 force units, the proboscis servo 0.1:
+                        # at rest 0.08 of travel, pressed 0.57 (measured 2026-09-20)
+FIRE_PRESSED = 0.35     # fraction of travel that counts as a press
+PROBOSCIS = {"rostrum": -1.24, "haustellum": -1.59}   # the extended pose
+WING_STIFFNESS, WING_DAMPING = 0.01, 0.001
 
 FLY_XML = Path(__file__).resolve().parents[2] / "assets" / "flybody" / "fruitfly.xml"
 
@@ -344,6 +354,15 @@ def _physics_xml(xml: str) -> str:
                       f'<geom type="capsule" fromto="0 0 0 0 0 0.085" size="0.007" material="metal" density="{LEVER_DENSITY}"/>')
     xml = xml.replace('<geom type="sphere" pos="0 0 0.09" size="0.013" material="knob"/>',
                       f'<geom type="sphere" pos="0 0 0.09" size="0.013" material="knob" density="{LEVER_DENSITY}"/>')
+    old_fire = (f'<body name="fire_button" pos="0 {CLAW_Y} {CLAW_Z - 0.02}">\n'
+                f'      <joint name="fire_button" type="slide" axis="0 0 1" range="-0.008 0" limited="true"/>\n'
+                f'      <geom type="cylinder" size="0.011 0.006" rgba="0.85 0.1 0.1 1"/>')
+    assert old_fire in xml, "fire button block"
+    xml = xml.replace(old_fire, (
+        f'<body name="fire_button" pos="{FIRE_POS[0]} {FIRE_POS[1]} {FIRE_POS[2]}">\n'
+        f'      <joint name="fire_button" type="slide" axis="0 0 1" range="-{FIRE_TRAVEL} 0" limited="true" '
+        f'stiffness="{FIRE_STIFFNESS}" damping="0.02" armature="1e-6"/>\n'
+        f'      <geom type="cylinder" size="0.011 0.006" rgba="0.85 0.1 0.1 1" density="{LEVER_DENSITY}"/>'))
     return xml
 
 
@@ -572,9 +591,10 @@ class Cockpit:
         """Puppet the controls (wired mode). Lever values in [-1, 1]. In
         embodied mode only the fire button is puppeted; the levers are
         physical and move through set_lever_targets()."""
-        if not self.physics:
-            self.data.qpos[self._jnt["lever_left"]] = lever_left * LEVER_RANGE
-            self.data.qpos[self._jnt["lever_right"]] = lever_right * LEVER_RANGE
+        if self.physics:      # everything is physical there
+            return
+        self.data.qpos[self._jnt["lever_left"]] = lever_left * LEVER_RANGE
+        self.data.qpos[self._jnt["lever_right"]] = lever_right * LEVER_RANGE
         self.data.qpos[self._jnt["fire_button"]] = -0.008 if fire else 0.0
         mujoco.mj_forward(self.model, self.data)
 
@@ -582,18 +602,31 @@ class Cockpit:
 
     def _setup_physics(self) -> None:
         m, d = self.model, self.data
-        lever_bodies = {m.body("lever_left").id, m.body("lever_right").id, m.body("fire_button").id}
+        lever_bodies = {m.body("lever_left").id, m.body("lever_right").id}
+        fire_body = m.body("fire_button").id
         for g in range(m.ngeom):
             name = m.geom(g).name
             if m.geom_bodyid[g] in lever_bodies:
                 # set after compile: with these flags in the XML on every geom of
                 # the body, MuJoCo 3.13 dropped the claw contacts (measured)
                 m.geom_contype[g] = 4; m.geom_conaffinity[g] = 4
+            elif m.geom_bodyid[g] == fire_body:
+                m.geom_contype[g] = 8; m.geom_conaffinity[g] = 8      # the proboscis only
             elif name.startswith("fly-") and "collision" in name:
                 if "claw" in name:
                     m.geom_contype[g] |= 4; m.geom_conaffinity[g] |= 4
+                elif any(k in name for k in ("rostrum", "haustellum", "labrum")):
+                    m.geom_contype[g] = 8; m.geom_conaffinity[g] = 8
                 else:
                     m.geom_contype[g] = 0; m.geom_conaffinity[g] = 0
+        # the wings have torque motors with no command: hold them at the stance
+        for side in ("left", "right"):
+            for ax in ("yaw", "roll", "pitch"):
+                j = m.joint(f"fly-wing_{ax}_{side}")
+                m.jnt_stiffness[j.id] = WING_STIFFNESS; m.dof_damping[j.dofadr[0]] = WING_DAMPING
+                m.qpos_spring[j.qposadr[0]] = d.qpos[j.qposadr[0]]
+        self._proboscis = {k: m.actuator(f"fly-{k}").id for k in PROBOSCIS}
+        self.fire_intent = False
         stance = _load_fly_stance()
         self._stance_ctrl = {}
         for a in range(m.nu):
@@ -663,6 +696,18 @@ class Cockpit:
             for a, v in zip(self._t1[side]["act"], targets):
                 lo, hi = self.model.actuator_ctrlrange[a]
                 self.data.ctrl[a] = float(np.clip(v, lo, hi))
+
+    def set_fire_intent(self, fire: bool) -> None:
+        """Embodied mode: extend the proboscis onto the button, or retract it."""
+        self.fire_intent = bool(fire)
+        for name, a in self._proboscis.items():
+            lo, hi = self.model.actuator_ctrlrange[a]
+            target = PROBOSCIS[name] if fire else self._stance_ctrl.get(name, 0.0)
+            self.data.ctrl[a] = float(np.clip(target, lo, hi))
+
+    def fire_pressed(self) -> float:
+        """How far the button is pressed, 0..1 of its travel."""
+        return float(np.clip(-self.data.qpos[self._jnt["fire_button"]] / FIRE_TRAVEL, 0.0, 1.0))
 
     def step_physics(self, seconds: float) -> int:
         """Advance the scene by wall-time seconds of simulation."""

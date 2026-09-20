@@ -42,7 +42,21 @@ def main() -> None:
         print(f"  {name:8s} levers target ({l:+d},{r:+d}) -> ({v[0]:+.2f},{v[1]:+.2f}) "
               f"[{np.degrees(-v[0] * LEVER_PUSH):+.1f} deg, {np.degrees(-v[1] * LEVER_PUSH):+.1f} deg] "
               f"contacts {con['left']}/{con['right']} max|qvel| {q:.1f} {'ok' if good else 'FAIL'}")
-    print("PASS: the fly works the levers" if ok else "FAIL")
+    # fire: the proboscis on the button
+    c.set_lever_targets(0, 0)
+    c.set_fire_intent(True)
+    for _ in range(args.ticks):
+        c.step_physics(1 / 15)
+    pressed = c.fire_pressed()
+    c.set_fire_intent(False)
+    for _ in range(args.ticks):
+        c.step_physics(1 / 15)
+    released = c.fire_pressed()
+    fire_ok = pressed >= 0.45 and released < 0.2 and np.abs(c.data.qvel).max() < 50
+    ok &= fire_ok
+    print(f"  fire     proboscis extended -> button pressed {pressed:.2f} of travel, retracted -> {released:.2f} "
+          f"max|qvel| {np.abs(c.data.qvel).max():.1f} {'ok' if fire_ok else 'FAIL'}")
+    print("PASS: the fly works the levers and the button" if ok else "FAIL")
     raise SystemExit(0 if ok else 1)
 
 
