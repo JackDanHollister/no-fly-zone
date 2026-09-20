@@ -101,6 +101,7 @@ INJECTION_MAPS = {
 LOWPASS_TAU = 0.15  # s, the slow channels' time constant
 SURROUND_RADIUS = 3.0   # lattice spacings; wider than the screen's small disc (radius 2) so its centre keeps 0.6 of its drive
 SURROUND_K = 1.0
+WIDEFIELD_K, WIDEFIELD_FRAC = 1.0, 0.10   # v8: opponency against the eye's mean surround energy; at 0.10 a small disc keeps 0.82, a loom edge past radius 5 nothing
 
 # v6: direction computed OUTSIDE the wiring. A Hassenstein-Reichardt
 # correlator over neighbouring ommatidia (this tick's ON or OFF transient at
@@ -124,6 +125,17 @@ INJECTION_MAPS["v7"] = [
     ("Tm1", "off_cs", 3000.0), ("Tm2", "off_cs", 2000.0),
     ("Tm4", "off_cs", 2000.0), ("Tm9", "off_cs", 2000.0),
     ("T3", "onoff_cs", 3000.0),
+]
+# v8: v7 plus wide-field opponency on the same channels, the second stage
+# a small-object detector needs (2026-09-20, docs/research/size-tuning-2026-09-20.md):
+# a loom's edge passes a surround everywhere at once and suppresses itself
+# against the eye's mean; a lone small disc does not. ENGINEERED.
+INJECTION_MAPS["v8"] = [
+    ("R1-6", "lum", MAX_PR_RATE),
+    ("Mi1", "on_wf", 3000.0), ("Tm3", "on_wf", 3000.0),
+    ("Tm1", "off_wf", 3000.0), ("Tm2", "off_wf", 2000.0),
+    ("Tm4", "off_wf", 2000.0), ("Tm9", "off_wf", 2000.0),
+    ("T3", "onoff_wf", 3000.0),
 ]
 INJECTION_MAPS["v6"] = INJECTION_MAPS["v4"] + [
     ("T4a", "on_dir_px", 20000.0), ("T4b", "on_dir_mx", 20000.0),
@@ -171,6 +183,16 @@ def centre_surround(sig: np.ndarray, S, k: float = 1.0) -> np.ndarray:
     """Centre minus k times the mean of the surround, rectified: a small
     object lights a centre without its surround, a large one lights both."""
     return np.clip(sig - k * (S @ sig), 0.0, None)
+
+
+def wide_field_opponent(cs: np.ndarray, k: float = 1.0, frac: float = 0.10) -> np.ndarray:
+    """A small-object channel: the surround-antagonised signal minus k times
+    its whole-eye mean, rectified, with the mean scaled by the fraction of
+    the eye a small object covers. A lone small disc lights a few ommatidia
+    and the mean stays near zero; a loom's edge lights a ring everywhere
+    and suppresses itself (the lobula's wide-field inhibition, LPi-like,
+    computed rather than wired)."""
+    return np.clip(cs - k * cs.mean() / frac, 0.0, None)
 
 
 def lattice_neighbours(xy: np.ndarray) -> dict[str, np.ndarray]:
@@ -448,7 +470,7 @@ class ConnectomeBrain:
         self._pr_all = np.concatenate(chunks)
         self._rates = np.zeros(len(self._pr_all), np.float32)
         self._S = surround_matrix(retina.centers_xy, SURROUND_RADIUS) \
-            if any(mode.endswith("_cs") for mode, _, _, _, _ in self._pops) else None
+            if any(mode.endswith(("_cs", "_wf")) for mode, _, _, _, _ in self._pops) else None
         self.n_visual = int(sum(sl.stop - sl.start for _, _, sl, _, _ in self._pops))
         self._prev_lum: dict[str, np.ndarray | None] = {"left": None,
                                                         "right": None}
@@ -532,6 +554,9 @@ class ConnectomeBrain:
                 cs[(side, "on_cs")] = centre_surround(onoff[side][0], self._S, SURROUND_K)
                 cs[(side, "off_cs")] = centre_surround(onoff[side][1], self._S, SURROUND_K)
                 cs[(side, "onoff_cs")] = cs[(side, "on_cs")] + cs[(side, "off_cs")]
+                for ch in ("on", "off"):
+                    cs[(side, f"{ch}_wf")] = wide_field_opponent(cs[(side, f"{ch}_cs")], WIDEFIELD_K, WIDEFIELD_FRAC)
+                cs[(side, "onoff_wf")] = cs[(side, "on_wf")] + cs[(side, "off_wf")]
         dirs: dict[tuple[str, str], np.ndarray] = {}
         for side in lum:
             prev = self._prev_onoff[side]
@@ -551,7 +576,7 @@ class ConnectomeBrain:
                 sig = self._lp[side][omm]
             elif mode == "dark_lp":    # slow sustained in the dark
                 sig = 1.0 - self._lp[side][omm]
-            elif mode.endswith("_cs"):   # v7 surround-antagonised transients
+            elif mode.endswith(("_cs", "_wf")):   # v7 surround, v8 surround + wide-field opponency
                 sig = cs[(side, mode)][omm]
             elif mode.startswith(("on_dir_", "off_dir_")):  # v6 correlator channels
                 key = mode
