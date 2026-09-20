@@ -43,7 +43,11 @@
   expansion-selective); three within-hemisphere rewirings and two
   whole-brain rewirings route it to none; the male replicates with two
   types against none. Size tuning answered the way direction was:
-  the wiring's contribution is the routing. Maps kept, used by no pilot.
+  the wiring's contribution is the routing. `pool_v9`, the pools
+  screened under v9, steer perfectly on the looks they take and take
+  almost none in the game (2.5 kills / 4.8 deaths against pool4's
+  2.7 / 5.7 on v4 and 3.1 / 4.4 on v9; ten seeds, nothing to choose).
+  Maps kept, no pilot uses them by default.
 
 - The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).
   Cause of the male's one-sidedness found: 13 of its 3,377 R1-6

@@ -143,7 +143,27 @@ fly builds it (v9) lets the measured wiring, and only the measured
 wiring, route it to specific descending neurons while keeping the loom.
 The wiring's contribution is the routing, as it was for direction.
 
+## In the game
+
+`READOUT_MAPS["pool_v9"]`, pool4's recipe on the v9 screen (steer DNp07,
+DNp05, DNp02, DNp04, DNp64; loom DNp12, DNge141, DNp26, DNp18), ten 100 s
+episodes on v9, against pool4 on v9 and pool4 on v4:
+
+| pilot | injection | kills / lives lost per 100 s | gated looks (L / R) | steer toward target |
+|---|---|---|---|---|
+| pool4 | v4 | 2.7 / 5.7 | 14 / 49 | 0.96 |
+| pool4 | v9 | 3.1 / 4.4 | 91 / 17 | 0.64 |
+| pool_v9 | v9 | 2.5 / 4.8 | 7 / 4 | 1.00 |
+
+Nothing to choose on kills with ten seeds. The small-object pools steer
+perfectly on the looks they take and take almost none (the engineered
+channel is quiet in the game: a tank against Battlezone's static ground
+crosses the gate on eleven looks in a thousand seconds); pool4 under v9
+takes many more looks and steers worse on the left. The engineered
+channel is a screen result, not yet a pilot.
+
 ## Kept
 
 v7, v8 and v9 are in `INJECTION_MAPS` for the record, with tests
-(`tests/test_surround.py`). None is used by a pilot.
+(`tests/test_surround.py`); `pool_v9` is a named readout. No pilot uses
+them by default.
