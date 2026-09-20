@@ -40,8 +40,9 @@
   only with v4 elsewhere: the measured wiring routes it to 14
   small-object-selective descending types (DNpe053, DNge035, DNg40,
   DNp70, ...) and keeps its loom (42 loom-responsive, 18
-  expansion-selective); two within-hemisphere rewirings and a whole-brain
-  rewiring route it to none. Size tuning answered the way direction was:
+  expansion-selective); three within-hemisphere rewirings and two
+  whole-brain rewirings route it to none; the male replicates with two
+  types against none. Size tuning answered the way direction was:
   the wiring's contribution is the routing. Maps kept, used by no pilot.
 
 - The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).

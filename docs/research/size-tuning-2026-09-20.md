@@ -113,6 +113,11 @@ descending neurons where a shuffle does not, and keep its loom?
 | rewired_ipsi seed 0 | v9 | 342 | 0 | 245 | 3 | 34 |
 | rewired_ipsi seed 1 | v9 | 345 | 0 | 258 | 4 | 36 |
 | rewired seed 0 | v9 | 236 | 0 | 121 | 2 | 0 |
+| rewired_ipsi seed 2 | v9 | 331 | 0 | 244 | - | 26 |
+| rewired seed 1 | v9 | 236 | 0 | 114 | - | 0 |
+| male (MaleCNS x0.6, columns) | v9 | 86 | 2 (DNg16 0.45, DNg100 0.43) | 52 | - | 4 |
+| male, rewired_ipsi seed 0 | v9 | 412 | 0 | 293 | - | 5 |
+| male, rewired seed 0 | v9 | 310 | 0 | 153 | - | 0 |
 
 This is the direction experiment's answer, for size. Given the
 small-object signal at the cells that carry it in the fly, the measured
@@ -121,7 +126,10 @@ the loom, DNpe053 (index 0.64), DNge035 (0.61), DNg40 (0.48, 22 Hz to the
 disc against 8 to the loom), DNge053, DNpe042, DNg75, DNp70 (58 against
 23 Hz) among them, and keeps its loom: 42 loom-responsive types and 18
 expansion-selective ones, as with v4. The three rewirings deliver it
-nowhere. Their T2 and T3 outputs, scattered by the shuffle, dilute into
+nowhere, and neither do a third within-hemisphere rewiring nor a second
+whole-brain one (0 and 0). The male at weights x0.6 under its column
+placement replicates the direction with two types (DNg16, DNg100)
+against none in its shuffles. The rewirings' T2 and T3 outputs, scattered by the shuffle, dilute into
 the 236-345 types they light for anything; not one prefers the small
 disc. The within-hemisphere shuffles keep laterality (34-36 lateralised
 types, more than the measured brain's 6, since everything they touch is
