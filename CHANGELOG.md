@@ -1,5 +1,28 @@
 # Changelog
 
+## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
+
+- README, `pyproject.toml` and `CITATION.cff` brought to publication state:
+  tests directory and MaleCNS loader no longer listed as missing, data
+  licences corrected (FlyWire v783 is CC-BY 4.0, Zenodo 10676866), package
+  metadata and citation references. A fresh clone installs from the
+  constraints and passes the no-data tests.
+- `CockpitControls(calibration="adaptive")`: each descending pool's span is
+  its own running peak (30 s decay, 4 Hz floor), so thresholds are
+  relative to the brain's own range; `train_plasticity.py --calibration`.
+  Unit test: a fixed calibration loses the startle at half gain, the
+  adaptive one keeps it.
+- Result (`docs/research/learning-2026-09-19.md`, last section): the
+  adaptive readout rescues none of the six learned brains, and the
+  measured brain is worse under it (0.52 against 0.85 kills), so the
+  provisional `pool4` spans carry a prior worth keeping. The giant fibre's
+  running peak is 32 Hz in the measured brain and at the 4 Hz floor in
+  every hits-trained brain: the loom pathway is gone, not rescaled. The
+  2026-09-19 reading is corrected: the harm is the rule's credit
+  assignment (reinforcers attributed to the correct response), not the
+  readout. Open: an action-tied eligibility, or a readout learned jointly
+  with the synapses.
+
 ## [2026-09-19] - Learning, second pass: the rule reaches the game and learns the wrong thing
 
 - `plasticity.py` edge sets `dn_in` (every input to a descending neuron,
