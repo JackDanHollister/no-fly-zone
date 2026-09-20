@@ -18,6 +18,9 @@
   screen re-run under it: the male has 12 expansion-selective descending
   types against 1-4 in the shuffles (5 against 0 before), 6 loom-selective
   against none, 85 responsive against 343-426; the replication sharpens.
+  `READOUT_MAPS["pool_male_hex"]`, the pools re-screened under the new
+  placement, do no better (1.6 / 2.4, one gated look on the left in ten
+  episodes); `pool_male` stays the default.
 
 - `noflyzone/provenance.py`: every JSON, `.npz` and `.pt` artefact now
   carries the commit and dirty flag, time and host, package versions, the

@@ -93,10 +93,21 @@ against 1-4 in the shuffles (5 against 0 before), 6 loom-selective types
 against none, and 4 lateralised types. The placement changed which
 inputs each column receives, not the conclusion about the wiring.
 
+## The pools re-screened
+
+`pool_male` was screened under the PCA placement. Re-screened under the
+column placement by the same recipe (`pool_male_hex`: steer DNp04, DNp02,
+DNp15, DNp07, DNb05, the five lateralised types with the highest
+small-object rate; loom DNg33, DNg36_a, DNp12, DNge141), it does not do
+better: 1.6 kills and 2.4 lives lost per 100 s, steering 0.96 correct on
+its gated looks but only one of those fourteen looks on the left, against
+2.2 / 2.3 and 0.90 with five left looks for `pool_male`. Ten seeds are
+too few to rank the two on kills; the old pools stay the male's default
+and the new set is kept as a named alternative.
+
 ## Still open
 
-The male's readout pools (`pool_male`) were screened under the PCA
-placement and should be screened again under this one; the annotation's
+The annotation's
 2:1 photoreceptor count is left as it is; and FlyWire could be given the
 same treatment from its own column annotation (Matsliah et al. 2024) if
 that is ever added to the data this loads.

@@ -179,6 +179,8 @@ LOOM_POOL_IPSI0 = ["DNp102", "DNg84"]
 # DNb05 and DNp07 are in the female pool too; DNp04, DNp02 and DNp20 are not.
 STEER_POOL_MALE = ["DNp04", "DNb05", "DNp02", "DNp20", "DNp07"]
 LOOM_POOL_MALE = ["DNg33", "DNp12", "DNp01"]
+STEER_POOL_MALE_HEX = ["DNp04", "DNp02", "DNp15", "DNp07", "DNb05"]
+LOOM_POOL_MALE_HEX = ["DNg33", "DNg36_a", "DNp12", "DNge141"]
 # "yaw": the descending types whose left-minus-right rate flips sign with
 # the direction of yaw optic flow under injection v6m (probe_motion.py
 # --yaw, 2026-09-18): DNp15, DNg41, DNae002, DNa02, DNa15, all with
@@ -224,6 +226,18 @@ READOUT_MAPS = {
         "DNg100": [("cell_type", "DNg100", None)],
         "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
         "DNp01": [("cell_type", t, None) for t in LOOM_POOL_MALE],
+    },
+    # pool4's recipe applied to the male's screen under the hex-column
+    # placement of 2026-09-20 (docs/research/male-retinotopy-2026-09-20.md):
+    # steer = the five lateralised (LI 1.0, consistent) types with the
+    # highest small-object rate; loom = the loom-selective, non-lateralised
+    # types above 300 Hz, plus DNp12
+    "pool_male_hex": {
+        "DNa02_L": [("cell_type", t, ("left",)) for t in STEER_POOL_MALE_HEX],
+        "DNa02_R": [("cell_type", t, ("right",)) for t in STEER_POOL_MALE_HEX],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
+        "DNp01": [("cell_type", t, None) for t in LOOM_POOL_MALE_HEX],
     },
     # pool4's recipe applied to the rewired_ipsi seed-0 brain's own screen
     "pool_ipsi0": {
