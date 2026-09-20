@@ -256,6 +256,8 @@ STEER_POOL_MALE = ["DNp04", "DNb05", "DNp02", "DNp20", "DNp07"]
 LOOM_POOL_MALE = ["DNg33", "DNp12", "DNp01"]
 STEER_POOL_MALE_HEX = ["DNp04", "DNp02", "DNp15", "DNp07", "DNb05"]
 LOOM_POOL_MALE_HEX = ["DNg33", "DNg36_a", "DNp12", "DNge141"]
+STEER_POOL_V9 = ["DNp07", "DNp05", "DNp02", "DNp04", "DNp64"]
+LOOM_POOL_V9 = ["DNp12", "DNge141", "DNp26", "DNp18"]
 # "yaw": the descending types whose left-minus-right rate flips sign with
 # the direction of yaw optic flow under injection v6m (probe_motion.py
 # --yaw, 2026-09-18): DNp15, DNg41, DNae002, DNa02, DNa15, all with
@@ -313,6 +315,17 @@ READOUT_MAPS = {
         "DNg100": [("cell_type", "DNg100", None)],
         "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
         "DNp01": [("cell_type", t, None) for t in LOOM_POOL_MALE_HEX],
+    },
+    # pool4's recipe applied to the v9 screen (docs/research/size-tuning-2026-09-20.md):
+    # steer = the five lateralised (LI >= 0.8, consistent) types with the
+    # highest small-object rate under the engineered small-object channel;
+    # loom = the loom-selective, non-lateralised types above 200 Hz
+    "pool_v9": {
+        "DNa02_L": [("cell_type", t, ("left",)) for t in STEER_POOL_V9],
+        "DNa02_R": [("cell_type", t, ("right",)) for t in STEER_POOL_V9],
+        "DNg100": [("cell_type", "DNg100", None)],
+        "pIP10": [("min_of", ("DNa02_L", "DNa02_R"), None)],
+        "DNp01": [("cell_type", t, None) for t in LOOM_POOL_V9],
     },
     # pool4's recipe applied to the rewired_ipsi seed-0 brain's own screen
     "pool_ipsi0": {

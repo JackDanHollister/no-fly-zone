@@ -38,6 +38,7 @@ CALIBRATION_MAPS: dict[str, dict[str, dict[str, float]]] = {
 CALIBRATION_MAPS["pool_ipsi0"] = CALIBRATION_MAPS["pool4"]
 CALIBRATION_MAPS["pool_male"] = CALIBRATION_MAPS["pool4"]
 CALIBRATION_MAPS["pool_male_hex"] = CALIBRATION_MAPS["pool4"]
+CALIBRATION_MAPS["pool_v9"] = CALIBRATION_MAPS["pool4"]
 CALIBRATION_MAPS["yaw"] = CALIBRATION_MAPS["pool4"]
 DN_CALIBRATION = CALIBRATION_MAPS["v0"]
 
