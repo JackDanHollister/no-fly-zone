@@ -14,6 +14,7 @@ from scipy import sparse
 
 from noflyzone.brain_connectome import LOOM_POOL, STEER_POOL
 from noflyzone.brain_lif import SHIU, ShiuBrain, annotations
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 INJECT = ["Mi1", "Tm3", "Tm1", "Tm2", "Tm4", "Tm9", "T3", "R1-6"]
@@ -75,11 +76,11 @@ def main() -> None:
     print(f"direct MBON -> readout-DN edges: {m_mbon_ro.sum()} ({cnt[m_mbon_ro].sum():.0f} synapses); "
           f"by DN type: {pd.Series(ct[post[m_mbon_ro]]).value_counts().to_dict()}")
     OUT.mkdir(exist_ok=True)
-    (OUT / "audit_mb_route.json").write_text(json.dumps({
+    dump_json(OUT / "audit_mb_route.json", {
         "kc_types": kc_types.to_dict(), "kc_mbon_edges": int(m_kc_mbon.sum()),
         "pam_kc_edges": int(m_pam_kc.sum()), "ppl_kc_edges": int(m_ppl_kc.sum()),
         "hops_visual_to_kc": first, "kc_reached": kc_reached, "hops_mbon_to_readout": first_ro,
-        "mbon_readout_edges": int(m_mbon_ro.sum())}, indent=1, default=str))
+        "mbon_readout_edges": int(m_mbon_ro.sum())}, brain=brain)
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from noflyzone.brain_lif import ABLATIONS
 DATASET_LABELS = {"783": "FlyWire v783 (female)", "malecns": "MaleCNS v1.0 (male)"}
 from noflyzone.brain_connectome import BrainView, ConnectomeBrain
 from noflyzone.loop import PilotLoop
+from noflyzone.provenance import dump_json, git_state, savez
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
@@ -143,6 +144,9 @@ def main() -> None:
             + (f" | signs {args.signs}" if args.signs != "predicted" else "")
             + (f" | aminergic {args.aminergic}" if args.aminergic != "excitatory" else "")
             + (f" | {learned}" if learned else ""))
+    g = git_state()
+    if g["short"]:
+        mode += f" | {g['short']}{'*' if g['dirty'] else ''}"   # the code that made this frame
     print(mode)
     view = BrainView(brain.brain)
     diag_types = ["Mi1", "T4a", "T4b", "T5a", "LC4", "LPLC2", "LC10a"]
@@ -234,13 +238,13 @@ def main() -> None:
     if plast is not None:
         OUT.mkdir(exist_ok=True)
         wpath = OUT / f"m3_learned_{plast.edge_set}_s{args.seed}_weights.npz"
-        np.savez(wpath, pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post)
+        savez(wpath, args=args, brain=core, pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post)
         print(f"plasticity: {learn_label.strip(' |')}; weights -> {wpath}")
     if args.trace:
         import json
         OUT.mkdir(exist_ok=True)
-        (OUT / f"{args.trace}.json").write_text(json.dumps(
-            {"mode": mode, "steps": args.steps, "trace": trace}))
+        dump_json(OUT / f"{args.trace}.json", {"mode": mode, "steps": args.steps, "trace": trace},
+                  args=args, brain=core)
         from collections import Counter
         acts = Counter(t["action"] for t in trace)
         print(f"actions: {dict(acts.most_common())}")

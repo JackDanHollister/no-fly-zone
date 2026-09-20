@@ -25,6 +25,7 @@ import numpy as np
 from noflyzone.controls import CockpitControls
 from noflyzone.plasticity import EDGE_SETS, MBPlasticity
 from noflyzone.rl_env import FlySquad
+from noflyzone.provenance import dump_json, savez
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
@@ -122,11 +123,11 @@ def main() -> None:
             if infos[i]["game_over"]:
                 controls[i] = CockpitControls(squad.action_names, calibration=calibration, saccade_hold=3,
                                               startle_refractory=15, steer_mode="li")
-    np.savez(OUT / f"plasticity_{tag}_weights.npz", pos=plast.pos, w0=plast.w0, w=plast.w,
-             pre=plast.pre, post=plast.post)
+    savez(OUT / f"plasticity_{tag}_weights.npz", args=args, brain=squad.brain,
+          pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post)
     if calibration == "adaptive":
         peaks = {k: float(np.mean([c.peak[k] for c in controls])) for k in controls[0].peak}
-        (OUT / f"plasticity_{tag}_peaks.json").write_text(json.dumps(peaks, indent=1))
+        dump_json(OUT / f"plasticity_{tag}_peaks.json", peaks, args=args, brain=squad.brain)
         print("adaptive spans at the end (Hz, mean over flies): " +
               "  ".join(f"{k} {v:.1f}" for k, v in peaks.items()))
     print(f"done in {time.time() - t0:.0f} s; weights -> out/plasticity_{tag}_weights.npz")

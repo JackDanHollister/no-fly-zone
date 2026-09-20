@@ -30,6 +30,7 @@ from probe_frontend import DT_GAME  # noqa: E402
 from noflyzone.brain_backend import BACKENDS, describe, make_brain  # noqa: E402
 from noflyzone.brain_connectome import ConnectomeBrain  # noqa: E402
 from noflyzone.retina import HexRetina  # noqa: E402
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 T4 = ["T4a", "T4b", "T4c", "T4d"]
@@ -132,7 +133,7 @@ def main() -> None:
                         r = rows[t]
                         print(f"{t:10s} {r['L:LtoR']:7.1f} {r['L:RtoL']:7.1f} {r['R:LtoR']:7.1f} {r['R:RtoL']:7.1f} {r['yaw_L']:+7.2f} {r['yaw_R']:+7.2f} {str(r['flip']):>5s}")
                     print(f"descending types whose right-minus-left rate flips sign with yaw direction (peak > 5 Hz): {len(flips)}: {flips[:15]}")
-                    (OUT / f"probe_yaw_{args.dataset}_{token}_{inj}_n{n}.json").write_text(json.dumps(rows, indent=1, default=float))
+                    dump_json(OUT / f"probe_yaw_{args.dataset}_{token}_{inj}_n{n}.json", rows, args=args, brain=core)
                 del brain
                 continue
             for n in args.speeds:

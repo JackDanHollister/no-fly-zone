@@ -18,6 +18,7 @@ from noflyzone.brain_backend import BACKENDS, describe, make_brain
 from noflyzone.brain_connectome import ConnectomeBrain
 from noflyzone.brain_lif import annotations
 from noflyzone.retina import HexRetina
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 DT_GAME = 1.0 / 15.0
@@ -105,8 +106,7 @@ def main() -> None:
         print(f"  {name:20s} DNa02 L {f('DN:DNa02_L')} R {f('DN:DNa02_R')}"
               f" | LC11 L {f('LC11')} R {f('LC11_R')} | HSE L {f('HSE')} R {f('HSE_R')}"
               f" | LC4 L {f('LC4')} R {f('LC4_R')} | DNp01 {f('DN:DNp01')}")
-    (OUT / args.out).write_text(json.dumps(
-        {"injection": args.injection, "results": results}, indent=1))
+    dump_json(OUT / args.out, {"injection": args.injection, "results": results}, args=args)
     print(f"wrote {OUT / args.out}")
 
 

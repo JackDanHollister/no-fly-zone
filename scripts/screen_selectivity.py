@@ -28,6 +28,7 @@ from noflyzone.brain_backend import BACKENDS, describe, make_brain  # noqa: E402
 from noflyzone.brain_connectome import ConnectomeBrain  # noqa: E402
 from noflyzone.brain_lif import annotations  # noqa: E402
 from noflyzone.retina import HexRetina  # noqa: E402
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 RESPONSIVE_HZ = 5.0   # a type must exceed its dark rate by this much on some stimulus
@@ -189,7 +190,7 @@ def main() -> None:
         s = r["summary"]
         print(f"{token:18s}" + "".join(f"{s[k]:15.2f}" if isinstance(s[k], float) else f"{s[k]:15d}" for k in keys))
     OUT.mkdir(exist_ok=True)
-    (OUT / args.out).write_text(json.dumps({"args": vars(args), "results": results}, indent=1, default=float))
+    dump_json(OUT / args.out, {"args": vars(args), "results": results}, args=args)
     print(f"wrote {OUT / args.out}")
 
 

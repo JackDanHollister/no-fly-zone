@@ -28,6 +28,7 @@ from noflyzone.brain_connectome import STEER_POOL, ConnectomeBrain  # noqa: E402
 from noflyzone.brain_lif import (ABLATIONS, AMINERGIC_MODES, SENSORY_MODES,  # noqa: E402
                                  annotations)
 from noflyzone.retina import HexRetina  # noqa: E402
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 CURRENT = ["DNa02", "DNg100", "DNp01", "oviDNa_a", "oviDNb", "DNa01", "DNa03",
@@ -159,9 +160,9 @@ def main() -> None:
               + f"; mean {summary['spiking_per_tick_mean']:.0f}")
         OUT.mkdir(exist_ok=True)
         tag = f"_{args.tag}" if args.tag else ""
-        (OUT / f"screen_dns_{inj}{tag}.json").write_text(json.dumps(
-            {"injection": inj, "brain": describe(core), "meta": core.meta,
-             "summary": summary, "rows": rows}, indent=1, default=float))
+        dump_json(OUT / f"screen_dns_{inj}{tag}.json",
+                  {"injection": inj, "brain": describe(core), "meta": core.meta,
+                   "summary": summary, "rows": rows}, args=args, brain=core)
     print("\nwrote out/screen_dns_<map>[_<tag>].json")
 
 

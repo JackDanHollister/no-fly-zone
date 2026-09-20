@@ -32,6 +32,7 @@ from noflyzone.brain_backend import BACKENDS, describe, make_brain
 from noflyzone.brain_connectome import ConnectomeBrain, lattice_neighbours, reichardt
 from noflyzone.controls import CockpitControls
 from noflyzone.loop import PilotLoop
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 MOVES = ("UP", "DOWN", "LEFT", "RIGHT")
@@ -294,7 +295,7 @@ def main() -> None:
               f"correct L {m('correct_left'):.2f} R {m('correct_right'):.2f} balanced {m('balanced_acc'):.2f} "
               f"li-corr {m('li_corr'):+.2f}  (n={n_seed})")
     OUT.mkdir(exist_ok=True)
-    (OUT / args.out).write_text(json.dumps({"args": vars(args), "rows": rows}, indent=1))
+    dump_json(OUT / args.out, {"args": vars(args), "rows": rows}, args=args)
     print(f"wrote {OUT / args.out}")
 
 

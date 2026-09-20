@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 
 from noflyzone.rl_env import FlySquad
+from noflyzone.provenance import attach
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
@@ -172,9 +173,10 @@ def main() -> None:
               f"reward/1k {row['rollout_reward_per_1k']:+6.2f} | ep kills {row['ep_kills']} lives {row['ep_lives']} "
               f"({len(episodes)} eps) | ent {row['entropy']:.2f} kl {row['kl']:.4f}", flush=True)
         if update % 10 == 0 or update == args.updates:
-            torch.save({"net": net.state_dict(), "norm_mean": norm.mean, "norm_var": norm.var,
-                        "features": args.features, "feature_types": squad.feature_types,
-                        "brain": args.brain, "n_actions": squad.n_actions, "args": vars(args)},
+            torch.save(attach({"net": net.state_dict(), "norm_mean": norm.mean, "norm_var": norm.var,
+                               "features": args.features, "feature_types": squad.feature_types,
+                               "brain": args.brain, "n_actions": squad.n_actions, "args": vars(args)},
+                              args=args, brain=squad.brain, update=update),
                        OUT / f"readout_{tag}.pt")
     squad.close()
     print(f"saved out/readout_{tag}.pt and out/readout_{tag}.jsonl")

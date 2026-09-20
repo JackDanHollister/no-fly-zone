@@ -197,7 +197,10 @@ the female brain, so oviDN is read out under that name.
    controls, idle scan off, pooled readouts, `bench_pilots.py`
    (`docs/research/cascade-probe-2026-09-14.md`). Still open: DN calibration
    from measured closed-loop distributions (the `pool4` spans are
-   provisional) and a provenance hash on every artefact.
+   provisional). Done 2026-09-20: a provenance stamp on every artefact
+   (`noflyzone/provenance.py`: commit and dirty flag, settings, brain
+   metadata, package versions, and an id hashed from the parts that
+   determine the result; the pilot's footer shows the commit).
 4. Done 2026-09-18: longer episodes, a balanced left/right steering
    metric, a gain-matched rewired control, three rewiring seeds and a
    within-hemisphere control (`docs/research/wiring-controls-2026-09-18.md`).
@@ -328,7 +331,9 @@ stay on the main thread).
 
 - `src/noflyzone/` — package (game bridge, cockpit scene, retina, brain;
   `brain_lif.py` is the SciPy reference, `brain_cuda.py` the Triton/CUDA
-  backend, `brain_backend.py` picks one)
+  backend, `brain_backend.py` picks one; `plasticity.py` the learning
+  rules, `rl_env.py` the batched squad for trained readouts,
+  `provenance.py` the stamp every artefact carries)
 - `scripts/` — runnable smoke tests and demos
 - `docs/architecture.md` — full design notes, milestone checklist and status audit
 - `CHANGELOG.md` — dated session log

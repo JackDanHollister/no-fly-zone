@@ -17,6 +17,7 @@ import pandas as pd
 from scipy import sparse
 
 from noflyzone.brain_lif import SHIU, ShiuBrain, annotations
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 T4 = ["T4a", "T4b", "T4c", "T4d"]
@@ -122,7 +123,7 @@ def main() -> None:
         cells_ = "".join(f"{(r['hops'][t] if r['hops'][t] is not None else '-'):>8}" for t in HOP_TARGETS)
         print(f"{r['k']}  {r['edges']:5s} {r['source']:18s}{cells_}")
     OUT.mkdir(exist_ok=True)
-    (OUT / "audit_dn_inputs.json").write_text(json.dumps(report, indent=1))
+    dump_json(OUT / "audit_dn_inputs.json", report, brain=brain)
     print(f"\nwrote {OUT / 'audit_dn_inputs.json'}")
 
 

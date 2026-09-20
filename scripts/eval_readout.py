@@ -16,6 +16,7 @@ from train_readout import ActorCritic  # noqa: E402
 
 from noflyzone.controls import CockpitControls  # noqa: E402
 from noflyzone.rl_env import FlySquad  # noqa: E402
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
@@ -75,7 +76,7 @@ def main() -> None:
         results[name] = (k, l); print(f"{name:20s} kills {k.mean():.2f} ± {k.std():.2f}  lives {l.mean():.2f} ± {l.std():.2f}", flush=True)
         squad.close()
     OUT.mkdir(exist_ok=True)
-    Path(args.out).write_text(json.dumps({n: {"kills": k.tolist(), "lives": l.tolist()} for n, (k, l) in results.items()}, indent=1))
+    dump_json(Path(args.out), {n: {"kills": k.tolist(), "lives": l.tolist()} for n, (k, l) in results.items()}, args=args)
     print(f"wrote {args.out}")
 
 

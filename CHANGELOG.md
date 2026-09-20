@@ -2,6 +2,13 @@
 
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
+- `noflyzone/provenance.py`: every JSON, `.npz` and `.pt` artefact now
+  carries the commit and dirty flag, time and host, package versions, the
+  script's arguments, the brain's metadata, and a 12-hex id hashed from
+  the commit, brain and arguments (a list payload gets a sidecar
+  `.provenance.json`). Twelve scripts write through it; `run_m3.py`
+  prints the commit on the footer.
+
 - Eyes panel on the dashboard (`dashboard.eyes_panel`): the two retinal
   mosaics as sampled this tick, cropped to the lattice, with each eye's
   transient energy; the footer wraps beside it. `run_m3.py --live` opens

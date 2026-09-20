@@ -16,6 +16,7 @@ import numpy as np
 
 from noflyzone.brain_backend import BACKENDS, describe, make_brain
 from noflyzone.brain_lif import DT, annotations
+from noflyzone.provenance import dump_json
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
@@ -108,9 +109,9 @@ def main() -> None:
                   flush=True)
     print(f"\n{len(results)} runs in {time.time() - t_all:.0f} s")
     OUT.mkdir(exist_ok=True)
-    (OUT / args.out).write_text(json.dumps(
-        {"seconds": args.seconds, "backend": describe(brain), "chain": CHAIN,
-         "results": results}, indent=1))
+    dump_json(OUT / args.out,
+              {"seconds": args.seconds, "backend": describe(brain), "chain": CHAIN,
+               "results": results}, args=args, brain=brain)
     print(f"wrote {OUT / args.out}")
 
 
