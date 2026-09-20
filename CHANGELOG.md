@@ -20,7 +20,9 @@
   against none, 85 responsive against 343-426; the replication sharpens.
   `READOUT_MAPS["pool_male_hex"]`, the pools re-screened under the new
   placement, do no better (1.6 / 2.4, one gated look on the left in ten
-  episodes); `pool_male` stays the default.
+  episodes); `pool_male` stays the default. Seed 0 of each fly re-recorded
+  with the corrected male and the eyes panel; `out/no-fly-zone-female-vs-male.mp4`
+  re-cut (the 2026-09-18 recordings kept as `*_pca.*`).
 
 - `noflyzone/provenance.py`: every JSON, `.npz` and `.pt` artefact now
   carries the commit and dirty flag, time and host, package versions, the
