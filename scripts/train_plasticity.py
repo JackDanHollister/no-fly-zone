@@ -44,6 +44,9 @@ def main() -> None:
     ap.add_argument("--elig-cap", type=float, default=None,
                     help="default: none for absolute scale, 50 for relative")
     ap.add_argument("--readout", default="pool4")
+    ap.add_argument("--calibration", default=None,
+                    help="controller calibration (default: same as --readout); 'adaptive' follows "
+                         "each pool's running peak so a gain change does not break the thresholds")
     ap.add_argument("--teaching", choices=["both", "kills", "hits"], default="both",
                     help="which game events teach: kills pulse PAM, hits pulse PPL1, or only one of them")
     ap.add_argument("--batch", type=int, default=4)
@@ -54,6 +57,7 @@ def main() -> None:
     ap.add_argument("--tag", default=None)
     args = ap.parse_args()
     tag = args.tag or f"{args.rule}_{args.edge_set}_s{args.seed}"
+    calibration = args.calibration or args.readout
     # a squad whose Poisson set also holds the dopamine populations
     from noflyzone.brain_lif import annotations
     from noflyzone.brain_backend import make_brain
@@ -79,7 +83,7 @@ def main() -> None:
     print(f"{tag}: {plast.n_edges} plastic edges ({plast.edge_set}, {plast.eligibility}, {plast.scale}), "
           f"{pam.size} PAM + {ppl1.size} PPL1 teaching cells, "
           f"{args.batch} flies x {args.episodes} episodes of {args.episode_ticks} ticks", flush=True)
-    controls = [CockpitControls(squad.action_names, calibration=args.readout, saccade_hold=3,
+    controls = [CockpitControls(squad.action_names, calibration=calibration, saccade_hold=3,
                                 startle_refractory=15, steer_mode="li") for _ in range(args.batch)]
     OUT.mkdir(exist_ok=True)
     log = open(OUT / f"plasticity_{tag}.jsonl", "w")
@@ -116,10 +120,15 @@ def main() -> None:
             print(f"ep {done_eps:3d}/{target} fly {i} #{ep_index[i]:2d}: kills {e['kills']} lives {e['lives_lost']} "
                   f"| drift {d['drift']:.4f} changed {d['frac_changed']:.3f} | PAM {row['pam_hz']:.1f} PPL1 {row['ppl1_hz']:.1f} Hz", flush=True)
             if infos[i]["game_over"]:
-                controls[i] = CockpitControls(squad.action_names, calibration=args.readout, saccade_hold=3,
+                controls[i] = CockpitControls(squad.action_names, calibration=calibration, saccade_hold=3,
                                               startle_refractory=15, steer_mode="li")
     np.savez(OUT / f"plasticity_{tag}_weights.npz", pos=plast.pos, w0=plast.w0, w=plast.w,
              pre=plast.pre, post=plast.post)
+    if calibration == "adaptive":
+        peaks = {k: float(np.mean([c.peak[k] for c in controls])) for k in controls[0].peak}
+        (OUT / f"plasticity_{tag}_peaks.json").write_text(json.dumps(peaks, indent=1))
+        print("adaptive spans at the end (Hz, mean over flies): " +
+              "  ".join(f"{k} {v:.1f}" for k, v in peaks.items()))
     print(f"done in {time.time() - t0:.0f} s; weights -> out/plasticity_{tag}_weights.npz")
     squad.close()
 

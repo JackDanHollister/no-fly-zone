@@ -39,7 +39,22 @@ class CockpitControls:
         self.idle_throttle = idle_throttle
         self.idle_steer = 0.0  # scanning turn: rotation makes optic flow
         self.calibration = calibration
-        self._cal = dn.CALIBRATION_MAPS[calibration]
+        # "adaptive": each pool's span is its own running peak rate (decay
+        # 30 s, floor 4 Hz), so thresholds are relative to the brain's own
+        # dynamic range and a gain change of the descending neurons does not
+        # break them. The spans start at the floor: the brain's first events
+        # set the scale, nothing is assumed from the measured brain. pool4's
+        # spans are kept only to scale the steer gate.
+        self.adaptive = calibration == "adaptive"
+        base = "pool4" if self.adaptive else calibration
+        self._cal = {k: dict(v) for k, v in dn.CALIBRATION_MAPS[base].items()}
+        self._span0 = {k: v["span"] for k, v in self._cal.items()}
+        self.peak_tau_s = 30.0
+        self.peak_floor_hz = 4.0
+        self.peak = {k: (self.peak_floor_hz if self.adaptive else v["span"]) for k, v in self._cal.items()}
+        if self.adaptive:
+            for k in self._cal:
+                self._cal[k]["span"] = self.peak[k]
         self.drive: dict[str, float] = {}
         self.saccade_hold = saccade_hold
         self.startle_ticks = startle_ticks
@@ -55,6 +70,11 @@ class CockpitControls:
         self.fire = False
 
     def update(self, rates: dict[str, float], dt: float) -> None:
+        if self.adaptive:
+            decay = float(np.exp(-dt / self.peak_tau_s))
+            for k in self._cal:
+                self.peak[k] = max(self.peak[k] * decay, float(rates[k]), self.peak_floor_hz)
+                self._cal[k]["span"] = self.peak[k]
         drive = dn.normalize(rates, self._cal)
         self.drive = drive
         # efference copy: while we move (a saccade's aftermath or a startle
@@ -73,7 +93,11 @@ class CockpitControls:
             left = 0.0 if self.suppressed else float(rates["DNa02_L"])
             right = 0.0 if self.suppressed else float(rates["DNa02_R"])
             total = left + right
-            li = (right - left) / total if total >= self.steer_min_hz else 0.0
+            gate = self.steer_min_hz
+            if self.adaptive:   # the gate scales with the steer pools' own range
+                gate *= (self.peak["DNa02_L"] + self.peak["DNa02_R"]) / (
+                    self._span0["DNa02_L"] + self._span0["DNa02_R"])
+            li = (right - left) / total if total >= gate else 0.0
             target_steer = float(np.clip(2.0 * li + self.idle_steer, -1.0, 1.0))
         else:
             target_steer = float(np.clip(
