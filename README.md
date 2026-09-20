@@ -36,8 +36,10 @@ at T4 (a point-neuron limit, measured); given direction there by an
 engineered correlator, the wiring builds the fly's horizontal and vertical
 motion systems (HS cells 113 Hz one way, 0 the other; VS cells likewise)
 and ten direction-selective descending neurons including DNa02, in both
-flies, where the shuffle builds none. A trained readout on top of it learns
-to survive but not to kill.**
+flies, where the shuffle builds none; given a small-object channel at
+T2/T3 the same way, it builds 14 small-object-selective descending
+neurons where three rewirings build none. A trained readout on top of it
+learns to survive but not to kill.**
 
 The brain runs as a leaky integrate-and-fire network over the measured
 wiring and is seated as the **pilot** inside a retro-futuristic 3D cockpit.
@@ -234,11 +236,13 @@ the female brain, so oviDN is read out under that name.
    position signal, not yaw flow; the yaw pilot's lower death rate is
    passivity (addendum in `docs/research/wiring-controls-2026-09-18.md`).
    Still open: a task that turns the fly, if motion steering is ever to be
-   tested; size tuning, still absent everywhere, and on 2026-09-20 an
-   engineered retinal surround (injection map v7) did not create it in
-   any brain, since a loom's edge passes a surround as well as a small
-   disc does (`docs/research/size-tuning-2026-09-20.md`); the eye-render
-   settings fix.
+   tested; size tuning, answered 2026-09-20 the way direction was
+   (`docs/research/size-tuning-2026-09-20.md`): a retinal surround alone
+   creates none (v7), surround plus wide-field opponency on every channel
+   hands it to every brain and removes the loom (v8), and the same
+   computation on T2/T2a/T3 only (v9) lets the measured wiring route it
+   to 14 small-object-selective descending types while three rewirings
+   route it to none; the eye-render settings fix.
 5. Done 2026-09-18: MaleCNS v1.0 loader (`scripts/build_malecns.py`,
    `--dataset malecns`), used as a second individual for the controls.
    Done 2026-09-20: the male's own hex-column retinotopy, columns

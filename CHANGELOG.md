@@ -34,7 +34,15 @@
   adds, small- and loom-versus-flash selectivity, appears in every brain
   because a surround silences a uniform field. A loom's edge passes a
   surround as well as a small disc; the front-end limit is not the
-  surround. Kept for the record, used by no pilot.
+  surround. v8 (surround plus wide-field opponency, `wide_field_opponent`)
+  creates small-vs-loom selective DNs in every brain and removes every
+  brain's loom: the front end again. v9, the same channel on T2/T2a/T3
+  only with v4 elsewhere: the measured wiring routes it to 14
+  small-object-selective descending types (DNpe053, DNge035, DNg40,
+  DNp70, ...) and keeps its loom (42 loom-responsive, 18
+  expansion-selective); two within-hemisphere rewirings and a whole-brain
+  rewiring route it to none. Size tuning answered the way direction was:
+  the wiring's contribution is the routing. Maps kept, used by no pilot.
 
 - The male's own retinotopy (`docs/research/male-retinotopy-2026-09-20.md`).
   Cause of the male's one-sidedness found: 13 of its 3,377 R1-6

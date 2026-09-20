@@ -105,7 +105,35 @@ direction experiment answered: given the computed signal at the cells
 that carry it, does the measured wiring deliver it to particular
 descending neurons where a shuffle does not, and keep its loom?
 
-(results below)
+### Result
+
+| brain | injection | responsive | small-selective vs loom | loom-responsive | expansion-selective | lateralised |
+|---|---|---|---|---|---|---|
+| measured | v9 | 70 | 14 | 42 | 18 | 6 |
+| rewired_ipsi seed 0 | v9 | 342 | 0 | 245 | 3 | 34 |
+| rewired_ipsi seed 1 | v9 | 345 | 0 | 258 | 4 | 36 |
+| rewired seed 0 | v9 | 236 | 0 | 121 | 2 | 0 |
+
+This is the direction experiment's answer, for size. Given the
+small-object signal at the cells that carry it in the fly, the measured
+wiring delivers it to 14 descending types that prefer the small disc to
+the loom, DNpe053 (index 0.64), DNge035 (0.61), DNg40 (0.48, 22 Hz to the
+disc against 8 to the loom), DNge053, DNpe042, DNg75, DNp70 (58 against
+23 Hz) among them, and keeps its loom: 42 loom-responsive types and 18
+expansion-selective ones, as with v4. The three rewirings deliver it
+nowhere. Their T2 and T3 outputs, scattered by the shuffle, dilute into
+the 236-345 types they light for anything; not one prefers the small
+disc. The within-hemisphere shuffles keep laterality (34-36 lateralised
+types, more than the measured brain's 6, since everything they touch is
+lateralised by anatomy) and nothing else.
+
+So the statement for the README is the same as for direction: the point
+LIF cannot build a small-object channel from columnar transients (v4), a
+front end that builds it for every cell hands size tuning to every brain
+and takes away the loom (v8), and a front end that builds it where the
+fly builds it (v9) lets the measured wiring, and only the measured
+wiring, route it to specific descending neurons while keeping the loom.
+The wiring's contribution is the routing, as it was for direction.
 
 ## Kept
 
