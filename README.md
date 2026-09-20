@@ -39,7 +39,11 @@ and ten direction-selective descending neurons including DNa02, in both
 flies, where the shuffle builds none; given a small-object channel at
 T2/T3 the same way, it builds 14 small-object-selective descending
 neurons where three rewirings build none. A trained readout on top of it
-learns to survive but not to kill.**
+learns to survive but not to kill. A three-factor rule on the synapses
+onto its descending neurons, with the dopamine applied to what preceded
+each reinforcer, produces a brain that plays better than the measured one
+on unseen games (dies 1.4-1.6 times per episode against 1.9, two seeds
+so far).**
 
 The brain runs as a leaky integrate-and-fire network over the measured
 wiring and is seated as the **pilot** inside a retro-futuristic 3D cockpit.
@@ -259,9 +263,11 @@ the female brain, so oviDN is read out under that name.
    beats another or random play), and on 2026-09-20 the adaptive-readout
    test that ruled out calibration as the cause, and a reward-prediction-
    error dopamine whose critic could not learn to predict the hits (the
-   brains die more, as before). Still open, for in-brain learning: a
-   teaching signal that carries credit (a structured predictor of the
-   hit, or a readout learned jointly with the synapses); a
+   brains die more, as before); then the finding that the hit's shell
+   never reaches the readout and the depression was the flash response,
+   and the latched eligibility that fixes it: the first learned brains
+   that beat the measured wiring on unseen games (two seeds; more
+   running). Still open: more seeds, the kills-only control, and a
    deliberate, labelled calyx-gain experiment if the mushroom body is ever
    to learn.
 7. M6, baseline done 2026-09-20 (`docs/architecture.md`, "Embodied mode"):

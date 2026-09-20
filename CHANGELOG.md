@@ -33,6 +33,19 @@
   than gravity on the button). The wings are held at the stance by a
   spring. The gate covers the button. Seed 0 fully embodied: 2000, three
   lives lost, 16 shots (wired: 3000, seven, 28), at real time.
+- Learning, fourth pass: the shell is invisible and the latch works
+  (`docs/research/learning-2026-09-19.md`, last sections). The recorded
+  fights show every descending pool silent before a hit and ablaze before
+  a kill: a hit cannot be predicted by any critic, and the loom-pathway
+  depression came from the punishment pulse coinciding with the brain's
+  response to the hit's own screen flash. `MBPlasticity(latch=True)`
+  (`--latch`) applies a reinforcer's pulse to the eligibility as it
+  stood the tick before the event. Two seeds, frozen test: the latched
+  brains die less than the measured wiring (1.38 and 1.60 lives per
+  episode against 1.90) and kill as often or more (0.85, 1.08 against
+  0.85), the first learned brains to beat the measured one; the rule
+  potentiated the steer, drive and escape inputs. `scripts/probe_shell.py`
+  measures what the retina carries before a hit. More seeds queued.
 - Learning, third pass (`train_plasticity.py --dopamine rpe`, `docs/research/
   learning-2026-09-19.md`, last section): the teaching signal as a
   reward-prediction error from a linear critic over the pooled population
