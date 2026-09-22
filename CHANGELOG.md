@@ -1,5 +1,17 @@
 # Changelog
 
+## [2026-09-22] - Private GitHub review copy synchronised
+
+- Restored GitHub CLI login through device authorisation and verified
+  `JackDanHollister/no-fly-zone` is PRIVATE.
+- Fetched `origin`, confirmed no remote divergence, and pushed all 46
+  pending commits through `b9430f8` to `main` without rewriting history.
+  The source, full journey and review draft are now available on GitHub.
+- Updated the README and review handoff to remove the authentication
+  blocker. Public release remains pending the author's review; visibility
+  was not changed. Documentation-only follow-up, checked with Git's
+  whitespace validation; the existing 21-test result remains applicable.
+
 ## [2026-09-22] - Repository review draft and full build journey
 
 - Reworked the README around the working pilot, GPU engine, physical

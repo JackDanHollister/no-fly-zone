@@ -74,13 +74,16 @@ recording label; the installed learned weights are from training label 1.
 
 ## Repository handoff
 
-The existing repository is `JackDanHollister/no-fly-zone`, with the source
-and development history already in local Git. At the start of this session
-`main` was 45 commits beyond the last fetched `origin/main` reference.
-The saved GitHub login returned HTTP 401, so current remote visibility and
-branch state could not yet be rechecked. The draft can be committed locally;
-remote synchronisation requires refreshed authentication and confirmation
-that the destination is private.
+The repository is [JackDanHollister/no-fly-zone](https://github.com/JackDanHollister/no-fly-zone).
+GitHub device login was restored on September 22, and the repository was
+verified as **PRIVATE**. After fetching the remote and confirming that it
+had no divergent commits, all 46 pending commits through review draft
+`b9430f8` were pushed normally to `main`, preserving the development history.
+
+The source, README, journey, lab notes, tests, evidence and small media are
+available there for review. The full local video and data archive remains
+outside Git. No repository visibility change, release or announcement was
+made.
 
 After your editorial review, public release remains a separate action.
 The intended publication copy consists of the source, tests, story, research

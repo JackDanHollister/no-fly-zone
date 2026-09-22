@@ -25,8 +25,8 @@ an RTX 4090**. The physical cockpit runs at about real time.
 [Run it](#run-it) ·
 [Session history](CHANGELOG.md)
 
-> Review draft, 22 September 2026. The build and experiments below are real;
-> the public-facing write-up is awaiting the author's review.
+> Private review draft, 22 September 2026. The source history and write-up
+> are now on GitHub. Public release awaits the author's review.
 
 ## What I built
 
