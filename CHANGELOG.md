@@ -1,5 +1,45 @@
 # Changelog
 
+## [2026-09-22] - Repository review draft and full build journey
+
+- Reworked the README around the working pilot, GPU engine, physical
+  controls and measured circuit results, with explicit playing flags,
+  credits and links to the evidence. Corrected the 15.1M count to directed
+  connection records rather than individual anatomical synapses.
+- Added `JOURNEY.md`: the build from September 13 through the final
+  pathway-swap experiments, including the original scaffold, art, CUDA
+  validation, first kills, controls, MaleCNS, motion/size probes, embodiment
+  and learning attempts. Earlier optimistic conclusions and their revisions
+  remain part of the story.
+- Refreshed `docs/architecture.md` against the current code, removing stale
+  milestones and unsupported cross-project priority/performance claims;
+  added `docs/REVIEW.md` as the author's reading guide before publication.
+- Found a remaining evaluation flaw: `FlySquad` never received the pilot
+  benchmark's random-start fix, its training label is not forwarded as the
+  neural RNG seed, and fixed tick-budget episodes may continue the same
+  game. A direct 450-action test produced identical frame sequences for
+  all eight requested seeds 700-703/800-803. Qualified the learning notes
+  and the earlier handoff's claim of independent held-out games.
+- Added two small evidence JSON files: the emulator seed audit and 672
+  original episode rows from 14 final-learning evaluations, with source
+  hashes and recomputed means. No new neural training/evaluation or code
+  changes; historical numerical results remain intact.
+- Validation: 21 selected existing tests passed, 11 data/CUDA tests
+  deselected, including physical controls; one known MuJoCo attachment
+  warning. GitHub synchronisation requires refreshed authentication after
+  HTTP 401. No public release or visibility change was requested or made.
+
+## [2026-09-22] - Session handoff and recovery of the final experiment results
+
+- Reviewed the README, research notes, local commit history and experiment
+  logs to reconstruct the last session. The final four chimera evaluations
+  completed successfully on 2026-09-20 at 15:53, after the last commit.
+- Summarised all 48 episodes per evaluation and recorded the results in
+  `docs/research/learning-2026-09-19.md`: swapping the loom pathway between
+  learned seeds 0 and 2 preserves their better/worse survival pattern on
+  both held-out sets. Updated the README handoff; no code changes or new
+  simulations.
+
 ## [2026-09-20] - Publication pass, and the calibration hypothesis tested and dropped
 
 - `make_video.py showcase`: the 66 s cut from the seed-0 recordings, on

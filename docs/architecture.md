@@ -1,143 +1,122 @@
-# NO-FLY-ZONE — Design Notes
+# NO-FLY-ZONE — architecture and reproduction notes
 
-## Concept
+Current implementation, reviewed 2026-09-22. The original design evolved
+substantially: the default is FlyWire, CUDA exists, idle scanning is optional,
+physical controls work, and learning has been tested. For that chronology,
+read [JOURNEY.md](../JOURNEY.md); for individual changes, [CHANGELOG.md](../CHANGELOG.md).
 
-The complete fly connectome, run as a spiking network, is the pilot of a mech
-(well, a tank). It never sees the game directly: the game exists as a glowing
-CRT inside a 3D cockpit, the fly's eyes exist as cameras inside that cockpit,
-and its motor output moves physical controls. The indirection is the point —
-it makes the fly a *pilot*, and it makes the cockpit a stage for maximum
-retro-futurist spectacle.
+## The loop
 
-As of Sept 2026 nobody in the fly-connectome wave (cobanov/awesome-fly, ~50
-projects) has done the cockpit/pilot framing, and no published example was
-found anywhere of "game screen rendered inside a physics sim, sampled by a
-virtual camera feeding an agent". This configuration is the novel bit.
+```mermaid
+flowchart LR
+    Game[Battlezone / ALE] -->|RGB frame| Screen[CRT texture in MuJoCo]
+    Screen --> Eyes[Two eye-camera renders]
+    Eyes --> Retina[Hex retinas: 721 samples per eye]
+    Retina -->|Engineered injection| Brain[Whole-brain LIF model]
+    Brain -->|Descending-neuron rates| Controller[Readout and motor rules]
+    Controller -->|Wired mode| Action[ALE action]
+    Controller -->|Embodied mode| Legs[IK and flybody servos]
+    Legs --> Levers[Contact-driven levers and button]
+    Levers -->|Measured positions| Action
+    Action --> Game
+```
 
-## Layers
+`PilotLoop` owns the loop. The game advances at 15 control ticks per second
+(4 emulator frames at 60 Hz); each tick applies the action selected from the
+previous percept. GL rendering stays on one thread for macOS compatibility.
+The brain never receives the emulator's object coordinates or a target detector.
+Game reward and damage are available separately to the learning machinery.
 
-1. **Game** — `ALE/BattleZone-v5` (gymnasium + ale-py). ROMs ship legally in
-   the pip package. Discrete(18) actions, 210x160 RGB frames. First-person
-   tank view: the fiction nests (cockpit in a cockpit).
-2. **Cockpit** — MuJoCo scene (MJCF). The game frame is uploaded into a model
-   texture on a curved-CRT screen geom each step (passive viewer
-   `update_texture(texid)` / `mjr_uploadTexture`). Aesthetic goals: emissive
-   neon trim, toggle banks, warning lights wired to real game events (damage →
-   red flashers — which also feed the fly's looming detectors), fly-scale
-   details (a sugar-water feeder line, a tiny mission patch).
-3. **Eyes** — offscreen renders from two eye cameras at the pilot's head
-   position → hexagonal ommatidia binning (flygym `Retina`: 721
-   ommatidia/eye, green+blue channels; aimbug's hex-column geometry ~4.8°
-   spacing as an alternative) → photoreceptor drive currents (DOOMFLY-style
-   R1–R6 brightness + R8 colour).
-4. **Brain** — LIF over the real wiring. Parameters from Shiu et al. 2024:
-   0.275 mV/synapse, tau_m 20 ms, tau_s 5 ms, signed by predicted
-   neurotransmitter. Dataset: MaleCNS v1.0 (has the full sensory→motor loop)
-   with FlyWire v783 as fallback. Backends: sparse SciPy/NumPy (Mac dev),
-   PyTorch (MPS on Mac / CUDA on 4090). Real time is not required on the Mac.
-5. **Motor** — descending-neuron readout table (per aimbug/Fly64 precedent):
-   - DNa02 left-minus-right rate → steering
-   - DNg100 → forward drive
-   - pIP10 courtship-song bouts → FIRE ("the more aroused the fly, the harder
-     it tries to shoot" — proven viral)
-   - DNp01 giant fiber → startle/reverse
-   In **wired** mode these rates set lever/pedal positions directly (levers
-   animate, positions map to ALE actions). In **embodied** mode they drive
-   flybody leg actuators and the levers respond to contact forces.
-6. **Learning (later)** — DOOMFLY's dopamine hack: PPL101 aversive dopamine
-   onto KC→MBON synapses when the tank takes damage. Label honestly: the
-   scene's norm (DOOMFLY, Ommatid) is that closed-loop connectomes don't
-   demonstrably learn yet. Choreographed demo footage vs closed-loop runs must
-   be labelled as such (lyra's Beat Saber fly was replay — don't repeat that
-   ambiguity).
+| Component | Responsibility | Main implementation |
+|---|---|---|
+| Game | ALE registration, actions, RGB frames, reward, life loss and automatic game-over reset | `src/noflyzone/game.py` |
+| Cockpit | Scene, textured screen, body attachment, rendering and optional physical controls | `src/noflyzone/cockpit.py` |
+| Retina | Hexagonal image sampling, luminance and transient drives | `src/noflyzone/retina.py` |
+| Brain engine | Sparse connection matrix, LIF state, delayed spikes and Poisson input | `brain_lif.py`, `brain_cuda.py`, `brain_backend.py` |
+| Brain interface | Cell annotations, input maps and descending-neuron pools | `src/noflyzone/brain_connectome.py` |
+| Controls | Rate calibration, steering, startle, movement gating and action mapping | `dn.py`, `controls.py` |
+| Experiment layer | Batched flies, PPO feature readouts and three-factor plasticity | `rl_env.py`, `plasticity.py`, scripts |
+| Inspection | Dashboard, live window, trace files and provenance | `dashboard.py`, `liveview.py`, `provenance.py` |
 
-## Mode flag
+## Eyes and neural input
 
-`--pilot wired|embodied`. Wired is the baseline that always works; embodied is
-the spectacle. Same brain, eyes, cockpit, game in both.
+The retina is a project-local hex sampler; it does not import flygym's
+retina. Eye cameras are fixed in the cockpit near head height. The sampler
+uses image-plane windows, not anatomical rays through every ommatidium.
+`WHITE_REF=255` was checked on the workstation's NVIDIA render path.
 
-## Milestones
+The playing baseline uses injection `v4`, zoom 2 and eye offset 0.15.
+The zoom covers the central portion of the image; opposite offsets give
+the two eyes different, overlapping windows on the same screen. Input
+rates are Poisson drives into named visual cell populations. The medulla
+channels bypass limitations of the earliest visual pathway in this model.
 
-- [x] M0 — repo, scaffold, smoke tests
-- [x] M1 — **the crux**: BattleZone frame → MuJoCo screen texture → eye-camera
-      offscreen render sees the game (proven by `scripts/smoke_cockpit_screen.py`,
-      including a right-way-up orientation gate)
-- [x] M2 — closed loop with a FAKE brain (hand-written reflexes) through the
-      full pipeline: frame → retina → stub → levers → actions. ~160 Hz on the
-      Mac (10x headroom over the 15 Hz game rate). `scripts/run_m2.py`.
-- [x] M2.5 — the fly is IN the cockpit: DeepMind/Janelia `flybody` model
-      (fetched by `scripts/fetch_assets.py`, ~137 MB, gitignored) seated via
-      MjSpec attach (freejoint deleted, stance keyframe applied by joint name,
-      kinematic puppet). Cockpit geometry is derived from its measured anatomy
-      (levers under the front claws at ±0.087/0.050/-0.054, screen at head
-      height). Retina feeds from "contact-lens" cameras just ahead of the
-      antennae (behind that the fly's own head occludes the screen — found
-      the fun way); the anatomical 140° fisheye eye cams ship with flybody
-      and are kept as `pov_camera` for visuals until M3 maps ommatidia by
-      real ray directions. Falls back to the bare cockpit when assets are
-      missing. ~21 Hz on the Mac with the fly (still above the 15 Hz game
-      rate; renders are the cost).
-- [x] M3 — connectome download + LIF core. Shipped 2026-09-14 as
-      `brain_lif.py`, a sparse NumPy/SciPy port of the Shiu et al. 2024 model
-      over the full FlyWire v783 brain (138,639 neurons, 15.1M edges); the
-      planned ~600-neuron escape-circuit stage was skipped. `validate_brain.py`
-      gates silence, sugar GRNs → MN9 and LC4 → DNp01 (Mac: MN9 101 Hz, giant
-      fibre 66/64 Hz). Gates are qualitative and single-seed; CPU only.
-- [~] M4 — whole-brain pilot in wired mode; dashboard. Partial as of
-      2026-09-14: `brain_connectome.py` + `run_m3.py` drive the game from real
-      DN readouts with a spike-cloud panel. Missing: `run_m3.py` forces an idle
-      forward-right scan above the action deadbands, so nothing yet shows the
-      connectome steering; the only gate is "brain not silent"; the DNp01
-      startle only fires when both giant-fibre cells spike in the same tick
-      (the readout averages the pair); no eyes panel; offline mp4 compositor
-      rather than the Fly64-style web view.
-- [~] M5 — cockpit art pass. Partial as of 2026-09-14: neon trim, lighting,
-      set dressing and Pillow-painted decals shipped (ab1c764, a3a9ba8).
-      Missing: any CRT treatment (the screen is a flat box with the raw
-      frame), warning lights beyond the single damage lamp, and that lamp sits
-      about 35° above the eye cameras' optical axis, outside their view.
-- [x] M6 — embodied mode: flybody seated, contact-driven controls (4090); baseline 2026-09-20, see "Embodied mode" below
-- [ ] M7 — learning experiments + the showcase video
+| Map | Purpose | Interpretation |
+|---|---|---|
+| `v0` | Early photoreceptor and medulla injection | Retained as script default/reference configuration |
+| `v4` | Expanded ON/OFF and small-object-relay inputs | Baseline for the documented reflex pilot |
+| `v5` | Additional slow Mi4/Mi9 channels | Did not establish T4/T5 direction selectivity |
+| `v6`, `v6m` | Retinal motion correlator injected at T4/T5, optionally mirroring the right eye | Direction is engineered at the input; downstream routing is tested |
+| `v7` | Retinal centre-surround processing | Insufficient for small-versus-loom selectivity |
+| `v8` | Surround plus wide-field suppression across channels | Also creates selectivity in shuffles and suppresses looming |
+| `v9` | Small-object channel restricted to T2/T2a/T3 | Measured wiring selectively routes this supplied signal |
 
-## Interface decisions (M2 review, 2026-09-13)
+These are alternative experimental configurations, not a single cumulative
+biological reconstruction. `FlySquad` uses the baseline input path; do not
+assume it implements every newer map available in the standalone pilot.
 
-- `dn.py` owns the DN contract: names, Hz units, per-DN calibration to
-  normalized [0,1] drives. Brains emit raw Hz; controls consume normalized.
-  Swapping in the M3 connectome = editing calibration entries only. DNp01 is
-  calibrated as an event neuron (one spike per tick saturates).
-- Brain contract: `step(drives, dt, signals) -> DN rates` + `reset()`.
-  `dt` has one source of truth (`BattleZone.dt`, derived from frameskip).
-  `signals` = {damage, reward, episode_end} — the M7 dopamine hook.
-- Retina owns photoreceptor calibration: `photoreceptors()` returns (n, 2)
-  drives in [0,1] (R1-6 broadband, R8 blue) against `WHITE_REF` — after any
-  art pass (M5), re-measure that one constant instead of retuning the brain.
-- Sticky actions OFF (determinism for circuit validation); episode auto-reset
-  is a stated decision ("the fly keeps living") with temporal state cleared at
-  the boundary; one-step motor latency is deliberate (reaction time).
-- The damage lamp lives above the screen, inside the eyes' FOV — a flash is a
-  real stimulus, not decoration.
-- Dev gotcha: pip's editable-install `.pth` can end up with the macOS hidden
-  flag set, and Python 3.14's site module silently skips hidden `.pth` files
-  (`ModuleNotFoundError: noflyzone`). `chflags nohidden` works but the flag
-  has come back; the durable fix in this venv is a direct symlink:
-  `ln -sfn "$(pwd)/src/noflyzone" .venv/lib/python3.14/site-packages/noflyzone`.
+## Datasets and model
 
-## Platform decisions (verified 2026-09-13)
+FlyWire v783 is loaded from the connectivity distributed with the Shiu
+reference implementation. There are 138,639 neurons and 15,091,983 input
+connection records. Each record represents a directed connection weighted
+by anatomical synapse count. Earlier notes sometimes called the record
+count “synapses”; it is not the number of individual anatomical synapses.
 
-- **Isaac Sim: rejected.** No macOS support (Ubuntu/Windows + RTX-with-RT-cores
-  only). GR00T is NVIDIA's humanoid VLA model, not a simulator. Nobody in the
-  fly wave used Isaac; the embodied projects all use MuJoCo.
-- **MuJoCo: chosen.** Native Apple-silicon wheels, runs identically on the
-  4090 box, `update_texture` solves screen-in-scene, flybody/flygym are
-  MuJoCo-native. macOS constraint: GL on the main thread → single-threaded
-  loop (step → upload → render → brain → act).
-- **Emulator: ale-py.** Legal bundled ROMs, arm64 wheels. stable-retro kept in
-  reserve for Cybernator (SNES) as a private-use later target; BizHawk (no
-  macOS), RetroArch UDP (no input injection), MAMEToolkit (Linux-only) ruled out.
-- Full source landscape and citations: The_Magi
-  `projects/fly-connectome/research/` (landscape.md, feasibility.md).
+MaleCNS v1.0 is converted into the same index, connectivity and annotation
+formats by `scripts/build_malecns.py`: 166,700 retained neurons and
+25,582,938 directed pairs. The loader verifies the three source files
+against pinned SHA-256 hashes and records conversion decisions in a manifest.
+It includes VNC data, but the physical controller does not use a neural VNC.
 
-## CUDA backend (2026-09-14)
+Both engines implement the Shiu-derived point-neuron LIF dynamics with
+0.1 ms steps, a 20 ms membrane time constant, 5 ms synaptic time constant,
+1.8 ms delay and 0.275 mV per anatomical synapse. Transmitter labels supply
+signs; anatomical counts supply the baseline magnitudes. This does not
+recover all physiological properties of the measured animal.
+
+Two playing-mode corrections are explicit options:
+
+- `--aminergic zero`: aminergic connections have no fast synaptic weight.
+  This prevents the persistent olfactory-region state observed in the
+  uncorrected sign convention. Literature transmitter labels are used for
+  identifying these cells.
+- `--sensory external_only`: incoming recurrent connections to primary
+  sensory neurons carry zero weight; those neurons receive injected input.
+
+The reference settings remain the loader default so the reference gates can
+still be run. Settings and dataset are stored in brain metadata.
+
+## Readouts and controls
+
+The baseline `pool4` readout uses screened descending types for left/right
+steering, DNg100 for drive and a pool for looming/startle. Coincident steer
+pool activity supplies its fire signal. The older `v0` mapping reads oviDN
+under the legacy `pIP10` contract key in the female, which lacks pIP10;
+MaleCNS can read pIP10 itself. That old label is not a biological explanation
+of the pooled pilot's firing behaviour.
+
+`dn.py` owns Hz-to-drive calibration. `controls.py` supplies lateralisation
+index steering, a three-tick movement suppression period and a 15-tick
+startle refractory in the playing configuration. These are engineered motor
+rules. Idle scanning is off unless `--idle-scan` is supplied.
+
+Fixed `pool4` calibration is provisional but remains the baseline. Adaptive
+calibration tracks each pool's decaying running maximum with a 4 Hz floor.
+It did not rescue the harmful learned brains and did not improve the
+baseline in the recorded calibration comparison.
+
+## CPU and CUDA
 
 `brain_cuda.ShiuBrainCUDA` subclasses the reference and keeps its API. Per
 0.1 ms step it launches four things on the current stream: zero the ring slot
@@ -158,98 +137,30 @@ over 0.3 s. Each ring row holds one entry per neuron, so it cannot overflow.
 Triton prints harmless `_POSIX_C_SOURCE` redefinition warnings when
 it builds its driver stub against the uv-managed Python headers.
 
-## Related work (2026-09-14)
+Batched execution shares the connection matrix, with separate neuronal
+state and input for each fly. `reset_rows()` resets selected neural states;
+`set_edge_weights()` updates shared weights between graph replays.
 
-Ten repos from the September 2026 fly-connectome wave were read for
-techniques worth borrowing (shuffled-connectome controls, DN screens,
-provenance hashes, MaleCNS loaders, plasticity controls); the notes are kept
-outside this repository. The short version: nothing surveyed runs a whole
-spiking brain faster than this backend at Shiu fidelity, and no surveyed
-project shows a connectome doing what a random sparse network would not,
-which is the bar this project holds itself to in `docs/research/`.
+The equivalence gates establish the tested short-horizon spike matches and
+aggregate agreement. They are not a claim of bit-identical trajectories
+for arbitrary durations or Poisson generators.
 
-## Status audit (2026-09-14)
+Historical measurements on Ubuntu 26.04, Python 3.12.14, RTX 4090,
+192 GB system RAM, headless EGL, 2026-09-14:
 
-Findings from reading the code on the workstation clone, before anything was
-run there. Each is a place where this document or the README says more than
-the code delivers. Fix the code or the wording, then delete the line.
+| Gate or run | Recorded result |
+|---|---|
+| CPU feeding / escape gates | MN9 101 Hz; giant fibre 66/64 Hz, matching the Mac run |
+| CUDA feeding / escape gates | MN9 about 102 Hz; giant fibre 66–70 Hz |
+| CPU pilot, 90 ticks | Brain 492 ms per tick; about 7.7× slower than real time |
+| CUDA pilot, 450 ticks | 5.8 s wall time for 30 s game time; brain 8.9 ms per tick |
+| Isolated brain tick | 263 ms CPU versus 5.5 ms CUDA |
+| Three-fly batch | About 4.2 ms per fly-tick |
+| Embodied pilot, September 20 | About real time; physics roughly 36–37 ms per tick |
 
-- Backends: resolved 2026-09-14 for CUDA. `brain_cuda.py` (Triton kernels,
-  CUDA graphs, `pip install -e ".[cuda]"`) is step-exact against the SciPy
-  reference for 500 steps and within 1% over chaotic horizons; there is still
-  no MPS backend, so the Mac stays on SciPy.
-- Dataset: FlyWire v783 from the Shiu GitHub repo is the default
-  (`Completeness_783.csv`, `Connectivity_783.parquet`). Since 2026-09-18
-  `brain_lif.DATASETS` also names MaleCNS v1.0, converted by
-  `scripts/build_malecns.py` from the pinned flat-connectome feathers into
-  the same three shapes (166,700 neurons, 25.6M signed pairs, annotations in
-  the FlyWire vocabulary, `data/malecns/cache/manifest.json`); every script
-  takes `--dataset malecns`. At Shiu gains the male brain is over-excited
-  (about 11,000 spiking neurons per tick against 2,000 for FlyWire on the
-  same stimuli) and its usable weight window is narrow; see
-  `docs/research/wiring-controls-2026-09-18.md`. The Zenodo dump is still
-  not fetched.
-- Mode flag: `run_m3.py --pilot wired|embodied` since 2026-09-20; `run_m2.py`
-  is wired only.
-- FIRE channel: pIP10 is absent from the female v783 brain;
-  `brain_connectome.py` reads oviDN under the `pIP10` key (and pIP10 itself
-  where a dataset has it, as MaleCNS does) and the dashboard bar still says
-  pIP10.
-- Motor swap: the M3 hand-over changed `controls.py` (idle_throttle,
-  idle_steer) rather than only `dn.py` calibration entries, contrary to the
-  M2 interface decision above. The `dn.py` spans were tuned for the stub and
-  never revisited for real firing rates.
-- DNp01: "one spike per tick saturates" is weakened by averaging spike counts
-  over both DNp01 cells; a single-cell spike gives drive 0.5 and `controls.py`
-  requires more than 0.5, so only a same-tick spike in both cells startles
-  (seen in the workstation M3 run).
-- Damage lamp: with the eye cameras' default 45° fovy the lamp centre is about
-  35° above the optical axis, so "a flash is a real stimulus" is not yet true.
-  It is also a solid 0.5 s latch with no emissive material.
-- Levers and physics: nothing calls `mj_step`; `set_controls` writes qpos and
-  calls `mj_forward`. In wired mode the levers are a visual puppet of the
-  action, not the cause of it; in embodied mode (2026-09-20) they are the
-  cause. There are no pedals.
-- Stance keyframe: the fetched `fruitfly.xml` carries one keyframe (checked
-  2026-09-20: `nkey` 1) and `_load_fly_stance()` reads it; the 2026-09-14
-  note that it was missing is out of date. `pov_camera` is dead code at HEAD.
-- Retina: `WHITE_REF` is exactly 255.0 and has not been re-measured since the
-  lighting changes; the retina is a from-scratch hex lattice, flygym is not
-  imported; ommatidia are not mapped by real ray directions (deferred, now
-  unclaimed by any milestone).
-- Tests: `tests/` exists since 2026-09-14 (31 tests on 2026-09-20; the
-  data, CUDA and flybody-dependent ones skip without their assets);
-  `smoke_battlezone.py` still has no assertions.
-- Versions: `mujoco>=3.2` is floored but `MjSpec.delete()` needs 3.3.4+, and
-  `cockpit.py` reaches into the private `Renderer._mjr_context`; `game.py`
-  reads the private `env.unwrapped._frameskip`. Known-good set on the
-  workstation (2026-09-14): mujoco 3.13.0, ale-py 0.12.1, gymnasium 1.3.0,
-  numpy 2.5.3, scipy 1.18.1, pandas 3.0.5, pyarrow 25.0.1, pillow 12.3.0.
-  Not yet pinned in `pyproject.toml`.
-- Loop rate, measured 2026-09-14 on the workstation: `run_m2` about 233 Hz
-  with the fly (Mac: about 21 Hz); `run_m3 --backend cpu` about 2 Hz, 7.7x
-  slower than real time, brain 492 ms per tick (Mac: about 2 Hz);
-  `run_m3 --backend cuda` about 80 Hz, 5.2x faster than real time over 450
-  ticks, brain 8.9 ms per tick. One isolated tick is 5.5 ms on the GPU versus
-  263 ms on the CPU.
-- Model corrections (2026-09-14): the reference model's sign convention
-  (dopamine, octopamine, serotonin as fast +1; Kenyon cells predicted
-  dopaminergic) yields a self-sustaining Kenyon-cell/PAM/antennal-lobe state
-  after any big visual event, persisting in darkness. `aminergic="zero"` and
-  `sensory_input="external_only"` in `brain_lif.ShiuBrain` remove it with the
-  validation gates intact; both are off by default so `validate_brain.py`
-  still tests the reference, and every run records them in `brain.meta`.
-- Attach conflict (MuJoCo 3.13): seating the fly warns because the flybody's
-  option block (0.1 ms timestep, gravity -981 in centimetre units, noslip,
-  density, viscosity, cone) differs from the cockpit's; parent values win.
-  Harmless while the fly is a kinematic puppet; embodied mode takes the
-  flybody's option block wholesale (centimetres, milligrams, 0.1 ms), so the
-  warning there is down to the key and constraint-count limits, which do
-  not matter.
-- Housekeeping: `run_m3.py` never calls `loop.close()`;
-  `PilotLoop.latency_report()` divides by zero before the first step; the
-  macOS `.pth` note below is Mac-specific and does not apply on Linux.
-
+The early timing runs predate some later rendering and controller features.
+Use run-specific wall-clock reports when comparing performance. Videos are
+encoded at game speed.
 
 ## Embodied mode (M6, 2026-09-20)
 
@@ -309,3 +220,93 @@ dead zone the fly held reverse for 940, then 1,399, of 1,500 ticks.
 Open: the achieved lever angle is about a quarter of the IK target (servo
 gain against spring and contact), which the normalisation absorbs; the
 VNC for the male; the fly's hind legs do nothing.
+
+## Reproducing the comparisons
+
+Start with the [README setup and full pilot command](../README.md#run-it).
+The `run_m3.py` defaults intentionally retain the early `v0` reference path;
+use the complete playing flags for the recorded baseline.
+
+The corrected pilot benchmark varies the start using a seeded burst of
+15–60 random actions. It supports whole-brain shuffles, within-hemisphere
+shuffles, silencing and gain scaling. See its `--help` and the commands in
+[the wiring note](research/wiring-controls-2026-09-18.md).
+A bare `--seed` change in `run_m3.py` does not introduce that warm-up.
+
+For the male, obtain the v1.0 flat-connectome files from the
+[official download page](https://male-cns.janelia.org/download/), place
+these in `data/malecns/`, and run `.venv/bin/python scripts/build_malecns.py`:
+
+- `body-annotations-male-cns-v1.0-minconf-0.5.feather`
+- `body-neurotransmitters-male-cns-v1.0.feather`
+- `connectome-weights-male-cns-v1.0-minconf-0.5.feather`
+
+The converter checks the version by hash; it is not a downloader. Add
+`--dataset malecns --weight-scale 0.6` to supported scripts and use
+`--readout pool_male` for the recorded male pilot. The corrected placement
+uses annotated hex columns and partner-derived columns for missing cells.
+The residual photoreceptor count imbalance remains documented.
+
+## Learning protocol: current limitation
+
+`train_readout.py` trains a PPO action readout on a frozen connectome,
+a shuffled connectome or retinal features. `train_plasticity.py` instead
+changes selected connections in the spiking model while the fixed reflex
+controller plays. Rule-off and size-matched shuffled-edge controls are
+available; the initial mushroom-body experiment did not run the shuffled
+control after finding negligible activity.
+
+**The September 22 review found that the independent-start fix in
+`bench_pilots.py` was not propagated to `rl_env.FlySquad`.** Its seed list
+only reaches the Gym reset. Eight requested seed labels produced identical
+frame sequences under the same 450 actions in a direct check. The wrapper
+also does not forward those seeds to the neural RNG. The logged training
+runs have different realised histories, but the labels do not establish
+independent neural seeds or held-out game starts.
+
+Furthermore, a fixed tick-budget boundary resets episode bookkeeping without
+resetting the game; neural rows reset only on game over. Thus 48 logged
+“episodes” are not necessarily 48 independently reset games. Episode-level
+standard errors in the historical tables should not be treated as accounting
+for all dependence.
+
+The numerical observations are preserved. Claims of generalisation to unseen
+games require a corrected protocol and fresh runs. No training code was
+changed during the write-up, so historical outputs remain interpretable
+against the original implementation. See the
+[learning audit](research/learning-2026-09-19.md#evaluation-protocol-audit-2026-09-22).
+
+## Tests, artefacts and remaining limits
+
+There are 32 collected tests at this review. The September 22 command
+`MUJOCO_GL=egl PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 .venv/bin/python -m pytest
+-m "not data and not cuda"` passed 21, with 11 deselected, including the
+physical lever and proboscis-button test. The flybody attachment emitted
+its known non-fatal constraint/keyframe-limit warning. Data/GPU gates were
+not rerun for this documentation pass; their historical results are above.
+
+New run artefacts use `provenance.py` for commit, dirty state, settings,
+package versions and an identity hash. Older artefacts predate that change.
+The small [review evidence bundle](research/evidence/) contains final-learning
+rows and the seed audit; the complete raw run archive, models, fetched data
+and full videos remain in gitignored `out/`, `data/` and `assets/`.
+
+Remaining implementation limits worth carrying into future work:
+
+- The damage lamp is outside the default eye view. The game's own damage
+  flash can reach the retina; these are different stimuli.
+- The CRT is a flat textured box without a curvature/shader treatment.
+- Validation gates test silence and selected response pathways, with limited
+  seeds. MaleCNS has no labelled sugar-GRN set for the same feeding gate.
+- Wired body attachment may fall back to a bare cockpit if assets are absent.
+  The physical validation script explicitly requires the flybody.
+- There is no Apple MPS brain backend. macOS uses SciPy; keep GL on the
+  main thread. A historical Mac editable-install issue is recorded in Git
+  history; it is not a required Linux setup step.
+- The project uses private MuJoCo renderer and ALE frameskip attributes.
+  Use the tested constraints; broad dependency lower bounds are not a
+  guarantee that every older combination works.
+- The standalone M3 runner does not yet close the whole loop on every exit
+  path. The loop itself has `close()`; cleanup is a future code change.
+- The fly is tethered. Its legs use IK, not a learned biological motor
+  circuit; hind legs are not used as controls.
