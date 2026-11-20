@@ -59,3 +59,24 @@ def test_batched_fly_zero_matches_single():
     for b in (single, trio):
         b.reset(); b.set_poisson({int(i): 150.0 for i in sugar})
     assert np.array_equal(single.run_counts(300), trio.run_counts(300)[0])
+
+
+@pytest.mark.data
+@pytest.mark.cuda
+def test_seeded_row_reset_restarts_rng_without_touching_other_flies():
+    brain = make_brain("cuda", batch=2, ablate="silenced")
+    sugar, _ = brain.indices_of(SUGAR)
+    rates = np.full((2, len(sugar)), 150.0, np.float32)
+    brain.set_poisson({int(i): 150.0 for i in sugar})
+    brain.reset_rows([0, 1], seeds=[123, 456])
+    brain.update_rates(rates)
+    initial = brain.run_counts(600).copy()
+    peer = brain._v[1].clone()
+    brain.reset_rows([0], seeds=[123])
+    assert (brain._v[1] == peer).all()
+    brain.update_rates(rates)
+    replay = brain.run_counts(600)
+    np.testing.assert_array_equal(replay[0], initial[0])
+    brain.reset_rows([0], seeds=[789])
+    brain.update_rates(rates)
+    assert not np.array_equal(brain.run_counts(600)[0], initial[0])

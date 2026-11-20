@@ -57,8 +57,19 @@ def readout(pattern, window=50):
 def evals(pattern):
     for p in sorted(OUT.glob(f"{pattern}.json")):
         d = json.loads(p.read_text())
+        if "conditions" in d and "start_audit" in d:
+            print(f"\n{p.name} ({d['status']}, teaching {d['external_teaching']})\n"
+                  "| frozen brain | episodes | kills per episode | lives lost per episode |\n"
+                  "|---|---:|---:|---:|")
+            for name, result in d["conditions"].items():
+                s = result["summary"]
+                print(f"| {name} | {s['episodes']} | {s['kills_mean']:.3f} | "
+                      f"{s['lives_lost_mean']:.3f} |")
+            continue
         print(f"\n{p.name}\n| policy | kills per 900 ticks | lives lost per 900 ticks |\n|---|---|---|")
         for name, v in d.items():
+            if not isinstance(v, dict) or "kills" not in v or "lives" not in v:
+                continue
             k, l = np.asarray(v["kills"]), np.asarray(v["lives"])
             print(f"| {name} | {k.mean():.2f} ± {k.std():.2f} | {l.mean():.2f} ± {l.std():.2f} |")
 

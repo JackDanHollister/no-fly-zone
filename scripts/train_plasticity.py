@@ -32,7 +32,7 @@ import numpy as np
 from noflyzone.controls import CockpitControls
 from noflyzone.plasticity import EDGE_SETS, MBPlasticity
 from noflyzone.rl_env import FlySquad
-from noflyzone.provenance import dump_json, savez
+from noflyzone.provenance import dump_json, savez, stamp
 
 OUT = Path(__file__).resolve().parent.parent / "out"
 
@@ -55,7 +55,7 @@ def main() -> None:
     ap.add_argument("--calibration", default=None,
                     help="controller calibration (default: same as --readout); 'adaptive' follows "
                          "each pool's running peak so a gain change does not break the thresholds")
-    ap.add_argument("--teaching", choices=["both", "kills", "hits"], default="both",
+    ap.add_argument("--teaching", choices=["both", "kills", "hits", "none"], default="both",
                     help="which game events teach: kills pulse PAM, hits pulse PPL1, or only one of them")
     ap.add_argument("--dopamine", choices=["events", "rpe"], default="events")
     ap.add_argument("--latch", action="store_true",
@@ -75,15 +75,27 @@ def main() -> None:
     ap.add_argument("--episode-ticks", type=int, default=900)
     ap.add_argument("--eta", type=float, default=2e-3)
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--neural-seed", type=int, default=None,
+                    help="neural RNG root (default: --seed); separate from game start labels")
     ap.add_argument("--tag", default=None)
     args = ap.parse_args()
     tag = args.tag or f"{args.rule}_{args.edge_set}_s{args.seed}"
     calibration = args.calibration or args.readout
+    neural_seed = args.seed if args.neural_seed is None else args.neural_seed
+    if min(args.episodes, args.batch, args.episode_ticks) < 1:
+        ap.error("--episodes, --batch and --episode-ticks must be positive")
+    if min(args.seed, neural_seed) < 0:
+        ap.error("game and neural seeds must be nonnegative")
+    if not tag or Path(tag).name != tag:
+        ap.error("--tag must be a filename, without directories")
+    for suffix in (".jsonl", ".provenance.json", "_weights.npz", "_peaks.json"):
+        path = OUT / f"plasticity_{tag}{suffix}"
+        if path.exists():
+            ap.error(f"output already exists: {path}; choose a new --tag")
     # a squad whose Poisson set also holds the dopamine populations
     from noflyzone.brain_lif import annotations
-    from noflyzone.brain_backend import make_brain
-    probe = make_brain("cpu") if False else None  # indices come from annotations below
     squad = FlySquad(batch=args.batch, seeds=[args.seed * 100 + i for i in range(args.batch)],
+                     neural_seed=neural_seed,
                      episode_ticks=args.episode_ticks, features="brain",
                      extra_sites=None)
     ann = annotations().drop_duplicates("root_id").set_index("root_id").reindex(squad.brain.root_ids)
@@ -91,7 +103,9 @@ def main() -> None:
     pam = np.flatnonzero(np.char.startswith(ct.astype(str), "PAM"))
     ppl1 = np.flatnonzero(np.char.startswith(ct.astype(str), "PPL1"))
     squad.close()
+    del squad
     squad = FlySquad(batch=args.batch, seeds=[args.seed * 100 + i for i in range(args.batch)],
+                     neural_seed=neural_seed,
                      episode_ticks=args.episode_ticks, features="brain",
                      readout=args.readout, extra_sites={"pam": pam, "ppl1": ppl1})
     plast = MBPlasticity(squad.brain, dt=squad.dt, eta=args.eta, rule=args.rule,
@@ -109,13 +123,18 @@ def main() -> None:
                                 startle_refractory=15, steer_mode="li") for _ in range(args.batch)]
     OUT.mkdir(exist_ok=True)
     log = open(OUT / f"plasticity_{tag}.jsonl", "w")
+    log_path = OUT / f"plasticity_{tag}.provenance.json"
+    log_path.write_text(json.dumps(stamp(args=args, brain=squad.brain), indent=2))
     obs = squad.reset()
     # the critic: V(x) = w . x over the squad's pooled features, standardised
     # by a running mean and variance, TD(0)
-    def structured_obs(lp_state):
+    def structured_obs(lp_state, done=None):
         """Per fly: the readout pools' rates this tick and their 1 s low-passes."""
         keys = ("DNp01", "DNa02_L", "DNa02_R", "DNg100", "pIP10")
         raw = np.array([[squad.last_dn[i].get(k, 0.0) for k in keys] for i in range(args.batch)])
+        if done is not None:
+            raw[done] = 0
+            lp_state[done] = 0
         a = 1.0 - np.exp(-squad.dt / 1.0)
         lp_state[:] = lp_state + a * (raw - lp_state)
         return np.c_[np.log1p(raw), np.log1p(lp_state)]
@@ -145,17 +164,20 @@ def main() -> None:
             rates = plast.teaching_rates()
             squad.set_teaching("pam", rates["pam"])
             squad.set_teaching("ppl1", rates["ppl1"])
-        obs, rew, done, infos = squad.step(actions)
-        kills = np.array([i["kill"] for i in infos]); hits = np.array([i["life_lost"] for i in infos])
+        obs, rew, done, infos = squad.step(actions, active=ep_index < args.episodes)
+        kills = np.array([i.get("kill", False) for i in infos])
+        hits = np.array([i.get("life_lost", False) for i in infos])
         if args.teaching == "kills":
             hits = np.zeros_like(hits)
         elif args.teaching == "hits":
             kills = np.zeros_like(kills)
+        elif args.teaching == "none":
+            kills = np.zeros_like(kills); hits = np.zeros_like(hits)
         if args.dopamine == "rpe":
             # one critic for the squad (shared weights, pooled experience), one
             # prediction error per fly; the teaching rate for the next tick is
             # the squad's mean error in units of its running RMS
-            x = standardise(obs if args.critic == "population" else structured_obs(lp_state))
+            x = standardise(obs if args.critic == "population" else structured_obs(lp_state, done))
             r = kills.astype(float) - 0.5 * hits.astype(float)
             v_prev = x_prev @ critic_w; v_next = np.where(done, 0.0, x @ critic_w)
             delta = r + args.gamma * v_next - v_prev
@@ -179,6 +201,7 @@ def main() -> None:
             recent = diag_acc[-args.episode_ticks:]
             row = {"fly": int(i), "episode": int(ep_index[i]), "global_episode": int(done_eps),
                    "kills": int(e["kills"]), "lives_lost": int(e["lives_lost"]), "ticks": int(e["ticks"]),
+                   "start": e["start"], "end_reason": e["end_reason"],
                    "drift": float(d["drift"]), "frac_changed": float(d["frac_changed"]),
                    "pam_hz": float(np.mean([x["pam_hz"] for x in recent])),
                    "ppl1_hz": float(np.mean([x["ppl1_hz"] for x in recent])),
@@ -191,9 +214,14 @@ def main() -> None:
             log.write(json.dumps(row) + "\n"); log.flush()
             print(f"ep {done_eps:3d}/{target} fly {i} #{ep_index[i]:2d}: kills {e['kills']} lives {e['lives_lost']} "
                   f"| drift {d['drift']:.4f} changed {d['frac_changed']:.3f} | PAM {row['pam_hz']:.1f} PPL1 {row['ppl1_hz']:.1f} Hz", flush=True)
-            if infos[i]["game_over"]:
-                controls[i] = CockpitControls(squad.action_names, calibration=calibration, saccade_hold=3,
-                                              startle_refractory=15, steer_mode="li")
+            controls[i] = CockpitControls(squad.action_names, calibration=calibration, saccade_hold=3,
+                                          startle_refractory=15, steer_mode="li")
+        if done.any():
+            # The learner pools all flies. Conservatively clear that shared
+            # temporal state at any boundary; learned weights are retained.
+            plast.reset_traces()
+            squad.extra_rates[:] = 0
+            lp_state[done] = 0
     savez(OUT / f"plasticity_{tag}_weights.npz", args=args, brain=squad.brain,
           pos=plast.pos, w0=plast.w0, w=plast.w, pre=plast.pre, post=plast.post,
           critic_w=critic_w)
@@ -203,6 +231,7 @@ def main() -> None:
         print("adaptive spans at the end (Hz, mean over flies): " +
               "  ".join(f"{k} {v:.1f}" for k, v in peaks.items()))
     print(f"done in {time.time() - t0:.0f} s; weights -> out/plasticity_{tag}_weights.npz")
+    log.close()
     squad.close()
 
 

@@ -1,0 +1,65 @@
+{
+  "campaign": "bounded_20260925",
+  "protocol": "independent-starts-v1",
+  "question": "Does latched event plasticity on visual-to-descending connections produce a repeatable practical gain over measured weights and size-matched shuffled-edge learning?",
+  "training": {
+    "seeds": [250930, 250931, 250932, 250933],
+    "neural_seeds": [260930, 260931, 260932, 260933],
+    "batch": 4,
+    "episodes_per_fly": 6,
+    "episode_ticks": 900,
+    "eta": 0.00002,
+    "eligibility": "hebbian",
+    "scale": "relative",
+    "elig_cap": 50,
+    "latch": true,
+    "teaching": "both",
+    "dopamine": "events",
+    "readout": "pool4",
+    "calibration": "pool4",
+    "condition_order": [
+      ["lr0", "on", "shuffled"],
+      ["on", "shuffled", "lr0"],
+      ["shuffled", "lr0", "on"],
+      ["lr0", "shuffled", "on"]
+    ],
+    "conditions": {
+      "on": {"rule": "on", "edge_set": "vis_dn"},
+      "lr0": {"rule": "lr0", "edge_set": "vis_dn"},
+      "shuffled": {"rule": "on", "edge_set": "vis_dn_shuffled"}
+    },
+    "boundary_policy": "Reset game, neural row, controller and sensory history at every boundary; clear pooled eligibility and dopamine traces and pending teaching pulses whenever any fly ends. Terminal-event teaching pulses do not carry into the next episode. Stop each fly at its exact quota."
+  },
+  "evaluation": {
+    "panels": [
+      {"name": "a", "seeds": [26094000, 26094001, 26094002, 26094003], "neural_seed": 260940},
+      {"name": "b", "seeds": [26095000, 26095001, 26095002, 26095003], "neural_seed": 260950}
+    ],
+    "episodes_per_fly": 4,
+    "episode_ticks": 900,
+    "external_teaching": "off",
+    "weights": "frozen final checkpoints only; no best-checkpoint or seed selection",
+    "lr0_reuse": "Only after all four lr0 checkpoints are bit-identical to measured weights, reuse the measured frozen evaluation for them. There are nine distinct evaluated conditions per panel.",
+    "audit": "Before training, repeat every scheduled reset and check distinct 450-action traces across all training and reserved evaluation starts. Verify logged training starts against the audit and matched conditions. Evaluation additionally matches neural starts and checks weights stayed frozen."
+  },
+  "decision": {
+    "primary": "utility_per_900_ticks = (kills - 0.5 * life_losses) * 900 / scored_ticks; compute per checkpoint, then equally weight the four training histories",
+    "minimum_utility_gain": 0.25,
+    "minimum_kill_rate_ratio": 0.95,
+    "maximum_life_loss_rate_ratio": 1.0,
+    "minimum_histories_better_than_both_controls": 3,
+    "requirement": "Every gate must pass independently in BOTH reserved panels: pooled on-rule utility gains at least 0.25 over measured and shuffled means; kill rate at least 95% of each control; life-loss rate no higher than either control; at least three of four on-rule histories beat both their matched shuffled history and measured weights in utility.",
+    "interpretation": "A small, fixed-budget practical screen, not a powered statistical demonstration of general learning. Each shared four-fly weight matrix is one training history. No p-value treats its episodes as independently trained brains.",
+    "if_pass": "Retain the working pilot and plan a larger independent confirmation before claiming a general learning benefit.",
+    "if_fail": "Close this Battlezone plasticity campaign without parameter tuning or extra selected tests. Keep the working pilot; redirect the next research milestone to a focused visual task such as target tracking or motion steering.",
+    "if_incomplete": "Report inconclusive due to incomplete protocol; do not score partial runs as a success or a negative learning result."
+  },
+  "budget": {
+    "training_runs": 12,
+    "training_episodes": 288,
+    "evaluation_episodes": 288,
+    "maximum_scored_ticks": 518400,
+    "maximum_wall_seconds": 7200,
+    "stop": "One campaign, final checkpoints only, fixed episode caps. Stop and report incomplete on any error, source/plan mismatch, audit failure, or two-hour wall limit. Run both reserved panels even if the first fails. No automatic retry or extra training."
+  }
+}

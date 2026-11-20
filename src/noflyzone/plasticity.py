@@ -210,5 +210,6 @@ class MBPlasticity:
 
     def reset_traces(self) -> None:
         self.trace_pre[:] = 0; self.trace_post[:] = 0
+        self.da_mean = 0.0
         self.pulse = {"pam": 0, "ppl1": 0}
         self._elig_prev = None; self._elig_latched = None

@@ -2,10 +2,8 @@
 
 LiveView.show(frame) paints an RGB array into a tkinter window and pumps
 its events; it returns False once the window has been closed or q pressed.
-The loop itself keeps its own time; the window never blocks it beyond the
-cost of one image conversion, so at five times real time on the CUDA
-backend the fly plays in real time with the frames it does not need
-dropped by the display, not by the brain.
+The caller controls pacing. Every submitted frame is painted; this class
+does not drop frames or slow a fast simulation to game speed.
 """
 
 from __future__ import annotations

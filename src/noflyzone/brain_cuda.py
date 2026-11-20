@@ -62,8 +62,8 @@ def _k_zero_slot(ring_cnt_ptr, ctr_ptr, R: tl.constexpr, B: tl.constexpr):
 
 @triton.jit
 def _k_neuron(v_ptr, g_ptr, refr_ptr, p_ptr, act_ptr, counts_ptr,
-              ring_list_ptr, ring_cnt_ptr, ctr_ptr,
-              n, seed, decay_m, decay_s, b_coef,
+              ring_list_ptr, ring_cnt_ptr, ctr_ptr, seeds_ptr, rng_origin_ptr,
+              n, decay_m, decay_s, b_coef,
               V_REST_C: tl.constexpr, V_RESET_C: tl.constexpr,
               V_TH_C: tl.constexpr, REFR: tl.constexpr, KICK: tl.constexpr,
               R: tl.constexpr, B: tl.constexpr, BLOCK: tl.constexpr):
@@ -101,7 +101,9 @@ def _k_neuron(v_ptr, g_ptr, refr_ptr, p_ptr, act_ptr, counts_ptr,
              mask=spk)  # pos < n always
 
     # fly 0 of any batch draws the same stream as an unbatched run
-    u = tl.rand(seed, fly.to(tl.int64) * (1 << 50) + c.to(tl.int64) * n
+    seed = tl.load(seeds_ptr + fly)
+    rng_step = c - tl.load(rng_origin_ptr + fly)
+    u = tl.rand(seed, fly.to(tl.int64) * (1 << 50) + rng_step.to(tl.int64) * n
                 + offs.to(tl.int64))
     hit = (p > 0.0) & (u < p)
     v = tl.where(hit, v + KICK, v)
@@ -174,6 +176,8 @@ class ShiuBrainCUDA(ShiuBrain):
         self._ring_list = torch.zeros((RING, B, n), dtype=torch.int32, device=dev)
         self._ring_cnt = torch.zeros((RING, B), dtype=torch.int32, device=dev)
         self._ctr = torch.zeros(1, dtype=torch.int64, device=dev)  # no wrap
+        self._rng_seeds = torch.full((B,), int(seed), dtype=torch.int64, device=dev)
+        self._rng_origin = torch.zeros(B, dtype=torch.int64, device=dev)
         self._poi_idx_dev = torch.empty(0, dtype=torch.int64, device=dev)
         self._ready = True
         self.reset()
@@ -200,19 +204,29 @@ class ShiuBrainCUDA(ShiuBrain):
         self._counts.zero_()
         self._ring_cnt.zero_()
         self._ctr.zero_()
+        self._rng_seeds.fill_(int(self._seed))
+        self._rng_origin.zero_()
         self._poi_idx_dev = torch.empty(0, dtype=torch.int64,
                                         device=self._device)
 
-    def reset_rows(self, rows) -> None:
+    def reset_rows(self, rows, *, seeds=None) -> None:
         """Restart the given flies (membrane, synapses, refractory, delay
         ring, counts) and leave the others and the Poisson registration
-        untouched; for per-fly episode ends."""
+        untouched. Explicit seeds restart those rows' random streams at
+        step zero independently of when other flies ended their episodes.
+        Omitting seeds retains the historical continuing-stream behaviour.
+        """
         rows = torch.as_tensor(np.asarray(rows, dtype=np.int64), device=self._device)
         self._v[rows] = V_REST
         self._g[rows] = 0.0
         self._refr[rows] = 0
         self._counts[rows] = 0
         self._ring_cnt[:, rows] = 0
+        self._p[rows] = 0.0
+        if seeds is not None:
+            self._rng_seeds[rows] = torch.as_tensor(
+                np.asarray(seeds, dtype=np.int64), device=self._device)
+            self._rng_origin[rows] = self._ctr
 
     def set_poisson(self, rates: dict[int, float]) -> None:
         """Same activation set and rates for every fly."""
@@ -254,8 +268,8 @@ class ShiuBrainCUDA(ShiuBrain):
         _k_zero_slot[(B,)](self._ring_cnt, self._ctr, R=RING, B=B)
         _k_neuron[(triton.cdiv(n, NEURON_BLOCK), B)](
             self._v, self._g, self._refr, self._p, self._act, self._counts,
-            self._ring_list, self._ring_cnt, self._ctr,
-            n, int(self._seed), float(self._decay_m), float(self._decay_s),
+            self._ring_list, self._ring_cnt, self._ctr, self._rng_seeds, self._rng_origin,
+            n, float(self._decay_m), float(self._decay_s),
             float(self._b_coef),
             V_REST_C=V_REST, V_RESET_C=V_RESET, V_TH_C=V_TH,
             REFR=REFR_STEPS, KICK=POISSON_KICK, R=RING, B=B, BLOCK=NEURON_BLOCK,
