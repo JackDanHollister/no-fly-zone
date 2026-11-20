@@ -1,5 +1,213 @@
 # Changelog
 
+## [2026-11-20] - Portfolio README tidy and refreshed hero media
+
+- Refreshed `docs/media/demo.gif` (`720 × 256`, `7.5 fps`, `1.0 MB`, 9 s loop
+  from the pure-connectome `v11` `--embodied` recording showing three kills on
+  physical levers) and `docs/media/dashboard_turn.png` (`t = 3.6 s` mid-kill
+  explosion frame across the CRT and both hex eye mosaics).
+- Simplified `README.md` into a concise, readable overview pointing to
+  `JOURNEY.md`, `docs/architecture.md` and `docs/research/` for full technical
+  and experimental detail.
+
+## [2026-11-19] - Pure connectome default, PPO circle-strafe audit and uncrossed anterior foveas
+
+- Audited the November 17 default GRU recording
+  (`out/pilot_20261117_174132_735739.json`): PPO learned Atari Battlezone's
+  open-loop clockwise circle-strafe exploit (`445` `RIGHT` vs `3` `LEFT` turns,
+  `823` `UP`, 2-tick `UP ↔ UPRIGHTFIRE` rhythm), explaining why a from-scratch
+  GRU on a scrambled `rewired` brain outscored the real connectome (`2.31`
+  kills / `+0.78` utility vs `1.69` / `+0.41`). Changed `./no-fly-zone`
+  (`scripts/pilot.py`) to default to the **pure frozen-connectome active reflex
+  (`--controller active`, zero RL)**, keeping `--controller learned` strictly
+  opt-in.
+- Mapped FlyWire v783's `pool4` spatial receptive fields across retinal azimuth
+  and uncovered two anatomical properties: the `LC10a → DNp07 / DNb05 / DNa02`
+  tracking fovea sits on the anterior/medial rim of each eye (`79 Hz` left,
+  `60 Hz` right at `sx = ±0.6`), and `DNb06` / `DNg52` give this female fly a
+  `7–10.5 Hz` right-eye wide-field floor (`DNb06` `105 Hz` right vs `15 Hz`
+  left on an identical flash).
+- Uncrossed the anterior foveas in `ACTIVE_PRESET` (`zoom=1.75`,
+  `eye_offset=0.21`, `center_y=0.48`, `eye_fovy=54°`, `converge_eyes=True`,
+  zero bezel bleed), added signed 2D photoreceptor-level `R8` chromatic
+  opponency (`injection="v11"` feeding FlyWire's `Tm20 / Tm5a / Tm5b` chromatic
+  medulla neurons and `T3` so stationary tanks do not turn invisible, with
+  `0.000` false alarms across the 360° horizon and `0.0 Hz` in both `rewired`
+  and `rewired_ipsi`), added tight crosshair fire discipline (`fovea_li=0.18`,
+  `pip_lock_drive=0.50`, `--no-off-axis-fire` to avoid Atari Battlezone's
+  29-tick missed-shell cannon lock-out), `steer_min_hz=8.0` + unilateral
+  `sharp_steer_hz=6.0`, directional giant-fibre escape (`DNp01 > 0.80`,
+  jinking away from the louder `DNa02` side without firing), and decoupled
+  alternating L/R patrol sweeps + forward optic-flow strides (`patrol_sweep=6`,
+  `patrol_stride=4`) in `src/noflyzone/brain_connectome.py`,
+  `src/noflyzone/controls.py`, `scripts/run_m3.py`, `scripts/bench_pilots.py`
+  and `scripts/bench_tracking.py`.
+- Re-ran moving-target tracking (`out/bench_tracking_2026-11-19.json`):
+  measured FlyWire wiring dropped to **`8.36°` RMS (`5.97°` MAE, `77%` lock
+  `<= 8°`, `0.99` turn-sign accuracy)**, separating internal optic-lobe
+  microcircuitry from within-hemisphere shuffles (`rewired_ipsi`:
+  `12.75–14.45°` RMS, `38–55%` lock) and whole-brain shuffles
+  (`22.53–29.70°` RMS, `20–26%` lock).
+- Re-ran the 10-seed, 1,500-tick in-game active-reflex wiring benchmark on
+  both `v4` (`out/bench_active_wiring10_2026-11-19.json`: `3.10` kills, `+0.00`
+  utility) and final `v11` (`out/bench_active_wiring10_v11_2026-11-19.json`):
+  measured wiring reached **`3.40` kills and `3.60` lives lost / 100 s**
+  (kills in `10/10` episodes, **`+1.60` utility**, `0.80` balanced steering
+  accuracy, `16.2%` L / `19.5%` R / `28.4%` UP / `7.1%` DN / `12.7%` FIRE)
+  versus `0.90–1.60` kills (`-0.35` to `-1.60` utility) for whole-brain
+  shuffles, `1.40–2.00` kills (`-1.15` to `-1.25`) for within-hemisphere
+  shuffles, and `0.70` non-firing baseline kills (`0` shots, `-1.40`) when
+  silenced.
+- Verified default pure-connectome 60-second seed-0 recordings: wired
+  (`out/pilot_20261119_155351_746031.mp4`: `3,000` pts, `3` lives lost, first
+  two kills at `3.5 s` and `5.0 s`, `159` L / `158` R) and physical-lever
+  `--embodied` (`out/pilot_20261119_155420_567215.mp4`: `3,000` pts, **`1` life
+  lost**, levers `-0.90..+1.00` L / `-0.85..+1.00` R). Added symmetric-patrol,
+  directional-loom-escape, signed-chroma, tight-fire and default-controller
+  tests (**56/56** full pytest suite passing).
+
+## [2026-11-17] - Active binocular vision, target tracking and bilateral GRU readouts
+
+- Fixed the central crosshair scotoma in the cockpit eye geometry
+  (`Cockpit(eye_fovy=54.0, converge_eyes=True)` with `zoom=1.15`,
+  `eye_offset=0.11`, `center_y=0.46`). Parallel `fovy=45°` cameras with outward
+  `eye_offset=0.15` had left zero ommatidia on `x ≈ 74..86` (the Battlezone
+  crosshair) and cut off the radar; converged eyes preserve zero bezel bleed,
+  see the radar, and place >= 15 ommatidia per eye across the crosshair.
+  Precomputed a sparse `csr_matrix` pixel-to-ommatidium sampler in `HexRetina`
+  (`0.13 ms` per eye) and calibrated `dashboard.compose()` descending bars to
+  `controls.drive`.
+- Added opt-in active saccadic foraging (`CockpitControls` `search_steer`,
+  `search_delay`, `fovea_li`, `direct_steer`, `set_command`, `to_action(commit)`
+  and `ConnectomeBrain.encode_stream(..., self_turn=...)`) plus `--preset active`
+  and `--readout-ckpt` on `scripts/run_m3.py`, and `--controller
+  {auto,learned,active,legacy}` on `./no-fly-zone` (supporting both wired and
+  `--embodied` physical-lever modes).
+- Built `scripts/bench_tracking.py` (`out/bench_tracking_2026-11-17.json`):
+  measured FlyWire v783 wiring tracks a compact moving CRT target at `16.87°`
+  RMS error (`168` turns, `0.67` turn-sign accuracy) across eight balanced
+  trajectories, beating three whole-brain shuffles (`25.41–28.74°`), `silenced`
+  (`22.32°`) and `rewired_ipsi:pool_ipsi0` (`26.88°`), while showing that a
+  within-hemisphere shuffle reading `pool4` (`16.13–20.19°`) can also track a
+  solitary spot on a blank field by hemisphere segregation alone.
+- Ran a 10-seed, 1,500-tick in-game active-reflex wiring benchmark
+  (`out/bench_active_wiring10.json`): once the crosshair blind spot is removed,
+  measured wiring scores **2.10 kills / 100 s** (`342.6` aimed shots, `0.50`
+  gated response fraction) versus **0.60** across all three gain-matched
+  whole-brain shuffles, **0.80** for `rewired_ipsi@0x0.7`, **1.10** for
+  `rewired_ipsi@0x0.7:pool_ipsi0`, and **0.10** when silenced.
+- Added `features="brain_bilateral"` (`1,799` `(cell_type, side)` pools instead
+  of hemisphere-collapsed `908`), `RunningNorm(var_floor=1.0)` (preventing
+  >10x Poisson spike amplification across `1,192` near-silent pools), and
+  `RecurrentActorCritic` (`GRUCell(256, 256)` with motor efference copy and
+  `3x3x2` factored action heads) in `rl_env.py`, `train_readout.py`,
+  `eval_readout.py` and `play_readout.py`.
+- Trained `champion_connectome_gru` (`409,600` fly-ticks, `466` episodes) and
+  four seed-matched from-scratch heads (`connectome`, `rewired`, `rewired_ipsi`,
+  `retina`, `307,200` ticks each) on the RTX 4090. Across 16 fresh held-out
+  60-second starts (`101..116`, `out/eval_readout_2026-11-17.json`),
+  `champion_connectome_gru_best` reaches **2.19 kills, 2.50 lives lost and +0.94
+  utility** (beating random `-0.59`, legacy reflex `-0.06` to `+0.28`, and
+  from-scratch retina `+0.69`), while documenting that high-capacity from-scratch
+  GRUs still decode shuffled brains as liquid reservoirs (`+0.06` to `+0.47`
+  utility).
+- Verified three 60-second seed-0 recordings (`pilot_20261117_174132_735739.mp4`:
+  `6,000` pts / `1` life lost wired GRU; `pilot_20261117_174139_553233.mp4`:
+  `2,000` pts / `2` lives lost embodied physical levers + proboscis;
+  `pilot_20261117_174349_035394.mp4`: `2,000` pts / `4` lives lost active
+  frozen-connectome reflex) and added 7 unit tests in
+  `tests/test_active_vision_and_gru.py` (**54/54** full pytest suite passing).
+  Write-up: `docs/research/active-vision-and-tracking-2026-11-17.md`.
+
+## [2026-09-25] - Usable local pilot and completed bounded learning campaign
+
+- Added `./no-fly-zone` with live viewing, recording, installation checks
+  and campaign status. It selects the working reflex preset, paces live
+  playback, and gives recordings unique names. The advanced runner keeps
+  its reference defaults and accepts explicit preset overrides.
+- Forwarded the standalone pilot's seed to its neural backend, recorded
+  actual completed duration on early exits, and closed the writer, window
+  and loop through an exit stack. Completed recordings survive a normal
+  window close or Ctrl-C during play. Existing outputs are refused.
+- Verified a 60-second/900-frame video, a five-second physical-controls
+  live run and a three-second direct-controls live run, with matching
+  traces. Inspected the dashboard recording. All 47 tests pass, including
+  model/physical gates, launch cleanup and campaign decision safeguards.
+- Recorded a fixed four-history learning plan before training: rule on,
+  rule off and shuffled-edge controls; 288 training plus 288 reserved
+  evaluation episodes; final checkpoints only; two-hour ceiling.
+- All 128 scheduled starts passed the pre-training audit. Every training
+  history used explicit independent neural seeds and full resets; all four
+  rule-off weight arrays stayed byte-identical to measured values.
+- Completed all 576 episodes and 501,692 scored ticks in 80.25 minutes.
+  Every success gate failed in both panels. All four learned histories
+  had lower utility than measured weights and their matched shuffled-edge
+  controls on both sets; the learned group killed less and lost more lives.
+- Preserved the original plan, start audit, full manifest with training
+  rows, and both complete evaluations in `docs/research/evidence/`. Checked
+  quotas, source/checkpoint hashes, start matching and recalculated rates.
+- Applied the stopping rule: closed this Battlezone plasticity attempt and
+  set a focused moving-target tracking benchmark as the next research
+  milestone. Updated the README, journey, architecture and review guide.
+  Prepared a local source review bundle; no commit, push or publication.
+
+## [2026-09-25] - Project direction review
+
+- Reviewed the corrected results and recorded a proposed next phase:
+  package the working pilot and inspection tools as version 1, and give
+  learning a bounded campaign with a predefined success criterion. Focused
+  visual tasks are the suggested fallback if that campaign fails.
+- Kept this recommendation separate from an approved release decision or
+  demonstrated learning benefit. Documentation only; no new runs or code
+  changes. Checked the documentation diff for whitespace errors.
+
+## [2026-09-25] - Independent learning episodes and 160 frozen evaluation episodes
+
+- Added explicit world resets and terminal-frame handling for `FlySquad`;
+  game-over and tick-budget boundaries both reset state. Reset no longer
+  advances an unreported NOOP tick. Controllers and teaching state reset at
+  boundaries, and completed flies stop accumulating evaluation episodes.
+- Forwarded training seeds to the neural backend, added per-row episode
+  seeds and Philox counter origins, and recorded start actions, lives, image
+  and RAM hashes in episode logs. PPO logs now retain individual episodes.
+- Found that 15–60 warm-up ticks still allowed two audited roots to produce
+  identical gameplay; the learning protocol's 75–150-tick warm-up passes
+  distinct-image and distinct-action-trace checks on the audited roots.
+- Added `eval_plasticity.py` for measured weights, four saved latched brains
+  and both pathway swaps, with a pre-recorded 16-start schedule, frozen-weight
+  checks and matched-start assertions. External teaching pulses are off;
+  this difference from historical rule-off evaluations is documented.
+- Completed the 112-episode comparison. The four saved learned brains
+  average 1.266 kills / 2.906 life losses, versus the measured baseline's
+  1.375 / 2.625 per episode: no overall improvement in this comparison.
+- A pathway swap initially lowered brain 0's life losses from 2.688 to
+  1.938. Specified and ran a fresh 48-episode follow-up: original brain 0
+  lost 1.875 lives per episode, the chimera 1.938, baseline 2.438. The
+  apparent gain over its recipient did not repeat. Historical checkpoint
+  training remains qualified; new independent training is next.
+- Preserved both complete results in `docs/research/evidence/`, with all
+  160 episode rows, audited starts, source/weight hashes and recomputed
+  means. Updated README, architecture, journey and research notes; taught
+  the existing summariser to display the frozen-comparison format.
+- Validation: all 38 tests passed, including data/CUDA and physical controls;
+  compilation and whitespace checks passed. Real evaluator, plasticity
+  trainer, retina-feature PPO trainer and readout-evaluator smoke runs
+  verified exact episode budgets and seed metadata. Original checkpoint
+  files and frozen weights were unchanged. No substantive new training,
+  commit or push; the only PPO update was the tiny entry-point smoke test.
+
+## [2026-09-25] - Resumption status review
+
+- Checked the September 22 handoff, learning audit and current source.
+  The wired and physical pilots are implemented; `FlySquad` still lacks
+  randomised starts, explicit training-to-neural seed propagation and full
+  resets at tick-budget episode boundaries.
+- Made the immediate README task concrete: regression checks for those
+  three protocol fixes, followed by matched frozen evaluations of the
+  baseline, four learned brains and pathway swaps before new learning claims.
+- Documentation-only review; no code changes, training or evaluations.
+  Validated the documentation diff with `git diff --check`.
+
 ## [2026-09-22] - Private GitHub review copy synchronised
 
 - Restored GitHub CLI login through device authorisation and verified

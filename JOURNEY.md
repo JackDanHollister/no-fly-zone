@@ -339,6 +339,56 @@ old result in isolation.
 
 [Final pathway-swap results and evaluation audit](docs/research/learning-2026-09-19.md).
 
+## September 25: repair the evaluation and repeat the comparisons
+
+The learning wrapper now starts a fresh game at every episode boundary,
+including its time limit, and resets each fly's neural state and random
+stream. Game starts have recorded action lists and image hashes. The old
+short warm-up still produced identical gameplay for two seed labels; a
+longer warm-up reached controllable play and passed the diversity checks.
+All 38 tests passed, including real game starts, CPU/GPU equivalence and
+the physical controls.
+
+The first corrected comparison covered 112 episodes: measured weights,
+four saved learned brains and both pathway swaps on 16 matched starts each.
+The learned brains averaged 1.27 kills and 2.91 life losses per episode,
+against 1.38 and 2.63 for the baseline. Their average did not improve it.
+All weights were frozen and external teaching pulses were off, a recorded
+difference from the historical evaluations.
+
+One swap looked promising: brain 0 lost fewer lives with brain 2's escape
+pathway. A focused 48-episode follow-up used new starts and neural seeds.
+The original brain then lost 1.88 lives per episode and the chimera 1.94;
+the apparent gain from the swap did not repeat. Both raw result sets are
+preserved with their source and checkpoint hashes. The next learning runs
+will need fresh independent training histories; repairing evaluation cannot
+retroactively repair the independence of the old training labels.
+
+[Corrected protocol, results and follow-up](docs/research/learning-2026-09-19.md#corrected-evaluation-protocol-2026-09-25).
+
+## September 25: make it usable, then give learning a stopping point
+
+The working pilot now launches with `./no-fly-zone`. It checks its local
+installation, opens a live dashboard or records without a display, and
+saves a uniquely named video and trace. Physical lever controls are one
+option away. Closing the window keeps the completed recording and releases
+the renderer. All 47 tests pass, and real recordings verify both direct and
+physical controls.
+
+Learning received one fixed campaign: four fresh training histories, each
+with rule-off and shuffled-edge controls, followed by frozen evaluation on
+two reserved start sets. The budget and success criteria were recorded
+before training. All 288 training and 288 evaluation episodes finished in
+80 minutes, with their starts, neural seeds and source hashes checked.
+
+The result was negative in both test sets. Each learned history had lower
+utility than the measured baseline and its own shuffled-edge control. The
+learned group averaged fewer kills and more life losses. The stopping rule
+therefore closes this Battlezone plasticity attempt; there is no extra
+selected seed or parameter search after seeing that result.
+
+[Fixed campaign, complete evidence and interpretation](docs/research/learning-campaign-2026-09-25.md).
+
 ## What is here now
 
 The repo contains the game bridge, cockpit, retina, CPU and GPU brain
@@ -354,6 +404,157 @@ also made the project more specific. There is evidence for selective
 routing through measured wiring, and a substantial engineering build
 around it. Reliable learning and a game-score advantage remain open.
 
-The next step is to make the learning evaluation independently reproducible,
-then identify which changes in the learned brains actually transfer a useful
-behaviour. That is where the journey currently stands.
+The evaluation repairs, corrected comparisons and fresh controlled campaign
+are complete. The pilot is now a usable local package.
+
+## November 17: why the fly could not see its own crosshair
+
+Reopening the recorded 60-second demo trace (`pilot_20260925_200200_883034.json`)
+explained why the pilot had looked hesitant and why measured wiring had never
+outscored a shuffled graph in Battlezone: the tank output `NOOP` on 787 of 900
+ticks and turned five times in a minute.
+
+The culprit was optical geometry, not the connectome. Both eye cameras pointed
+parallel (`+y`, `fovy = 45°`) at a close CRT while the zoomed retinal windows
+were shifted outward (`eye_offset = 0.15`). Projecting the screen centre
+(`x = 80`, the Battlezone aiming sight) through both cameras landed outside
+both 721-ommatidium lattices — **zero ommatidia in either eye saw the
+crosshair**, and the top radar was cropped off as well. Turning toward a tank
+made it vanish right as it lined up with the barrel, starving `pool4`'s
+binocular fire rule (`min(DNa02_L, DNa02_R)`). Meanwhile, `FlySquad`'s readout
+wrapper pooled `cell_type` without `side`, averaging left and right hemispheres
+together so PPO could not tell left from right, and divided `1,192` near-silent
+pools by `sqrt(var + 1e-8)`, amplifying stray single spikes more than tenfold.
+
+Converging both eyes on the CRT centre (`eye_fovy = 54°`, `converge_eyes = True`,
+`zoom = 1.15`, `eye_offset = 0.11`) put binocular overlap directly on the
+crosshair and brought the radar into view with zero bezel bleed. Three results
+followed immediately:
+
+1. **Moving-target tracking (`scripts/bench_tracking.py`):** across eight
+   reserved trajectories, measured FlyWire wiring holds a compact target at
+   `16.9°` RMS error (`168` turns), beating whole-brain shuffles (`25.4–28.7°`),
+   `silenced` (`22.3°`) and `rewired_ipsi` on its own pools (`26.9°`) — while
+   also showing honestly that `rewired_ipsi` reading `pool4` (`16.1–20.2°`) can
+   track a *lone* bright dot on a blank dark screen by hemisphere segregation
+   alone.
+2. **Cluttered Battlezone combat (`--preset active`):** once mountains,
+   obstacles and horizon lines fill both eyes at once, gross hemisphere
+   segregation is no longer enough. Across ten 100-second episodes
+   (`out/bench_active_wiring10.json`), the frozen measured connectome scores
+   **2.10 kills** (`342.6` aimed shots) against **0.60** for three whole-brain
+   shuffles, **0.80–1.10** for within-hemisphere shuffles, and **0.10** when
+   silenced.
+3. **Bilateral recurrent GRU readout (`TRAINED READOUT (GRU)`):** splitting
+   `(cell_type, side)` into `1,799` bilateral pools with a variance floor and a
+   `256`-unit GRU reached `2.19` kills and `2.50` lives lost per 60 s (`+0.94`
+   utility) across 16 held-out starts (`out/eval_readout_2026-11-17.json`), and
+   `6,000` points with `1` life lost on seed 0.
+
+## November 19: catching the RL shortcut — and finding where the fly actually looks
+
+Watching that `6,000`-point GRU video back was a great sanity check. On paper
+the numbers looked brilliant; on screen, the tank just seemed to drift
+relentlessly to the right instead of hunting left and right or reacting to
+enemies.
+
+Opening the 900-tick trace (`pilot_20261117_174132_735739.json`) caught a
+classic RL shortcut red-handed. Across 60 seconds, the PPO GRU held `UP` on
+**823 of 900 ticks**, pulsed `RIGHT` **445 times** (almost literally every
+second tick in a 2-tick `UP` ↔ `UPRIGHTFIRE` metronome), and turned **`LEFT`
+only 3 times in the entire game**. In 1980 Atari Battlezone, enemy tanks shoot
+at where you *were*, without leading a curving path. Driving forward in a
+steady clockwise spiral slides you off incoming shells while sweeping your gun
+across 360° for occasional hit-and-run kills — and because a recurrent GRU has
+its own hidden state and previous-action feedback, it can run that clockwise
+metronome largely open-loop without even relying on the fly's vision.
+
+The smoking gun was already sitting in our own control table
+(`out/eval_readout_2026-11-17.json`): training the exact same from-scratch PPO
+GRU on a **randomly scrambled (`rewired`) fly brain** actually *beat* the real
+connectome (`2.31` kills and `+0.78` utility vs `1.69` kills and `+0.41`
+utility). RL had quietly sidelined the connectome and gamed Battlezone's
+physics.
+
+So I pulled the trained GRU off the default launcher (`./no-fly-zone` now runs
+the pure frozen connectome reflex with **zero RL**, keeping `--controller
+learned` strictly opt-in) and went back to look at what the real fly brain was
+doing on its own.
+
+Sweeping a single spot across the left and right eyes separately revealed two
+genuinely biological quirks hiding in FlyWire v783:
+
+1. **The fly's tracking fovea sits on the anterior rim of each eye, not the
+   centre.** The `LC10a → DNp07 / DNb05 / DNa02` steering pool barely fires for
+   lateral spots (`2.5–10.5 Hz`), then spikes to **`79 Hz` on the inner edge of
+   the left eye** and **`60 Hz` on the inner edge of the right eye**. At
+   `zoom = 1.15, eye_offset = 0.11`, those two anterior foveas were actually
+   crossed past each other over the centreline — the fly was slightly
+   cross-eyed.
+2. **This particular female fly is slightly right-handed.** On an identical
+   bilateral flash, `DNb06` fires `105 Hz` on the right against `15 Hz` on the
+   left, giving the outer right eye a `7–10.5 Hz` background floor on passing
+   mountains that kept dragging the old low-threshold patrol clockwise.
+
+Uncrossing the two anterior foveas onto **`zoom = 1.75, eye_offset = 0.21,
+center_y = 0.48`** (still zero bezel bleed) snapped left targets cleanly onto
+the left fovea (`90.8 Hz`, `LI = -0.85`), right targets onto the right fovea
+(`69.2 Hz`, `LI = +0.87`), and binocular `pIP10` fire lock dead onto the
+crosshair (`69.2 Hz`, `LI = -0.08`). Pairing that with a `10 Hz` steering gate
+above the right-eye background floor, directional giant-fibre looming escapes
+(`DNp01 > 0.60`), and balanced alternating left/right patrol sweeps changed
+everything — with **zero learned weights**:
+
+- **Moving-target tracking (`out/bench_tracking_2026-11-19.json`):** measured
+  FlyWire wiring dropped from `16.9°` down to **`8.36°` RMS error (`5.97°` MAE,
+  `77%` crosshair lock, `0.99` turn-sign accuracy)** — separating the real
+  connectome cleanly from **every** control, including within-hemisphere
+  shuffles (`rewired_ipsi`: `12.75–14.45°` RMS, `38–55%` lock) for the first
+  time. Keeping left and right hemispheres separate is no longer enough once
+  you test the anterior-rim fovea's sharp retinotopy.
+
+The steering now looked right, yet watching the `v4` replay showed the fly was
+still hesitant to finish tanks off. Auditing the eight enemy encounters tick by
+tick exposed two final quirks — one biological, one pure 1980 Atari hardware:
+
+1. **The fly had "T-Rex vision" for stopped tanks.** Because `v4` only injected
+   frame-to-frame luminance changes, the instant an enemy tank stopped to aim,
+   every descending neuron dropped to `0.0 Hz` and the fly turned away. Yet
+   `HexRetina` had been computing the fly's **`R8` blue channel** all along
+   (`3×` stronger contrast on blue tanks against green ground than greyscale
+   luminance), and FlyWire v783 has **`3,630` measured excitatory synapses**
+   from the real R8-downstream chromatic medulla neurons (`Tm20`, `Tm5a`,
+   `Tm5b`) straight into `LC10a / LC11 / LC4`. Feeding pure signed `R8 − R1-6`
+   blue-ON centre-surround opponency into those chromatic cells (`v11`) gave
+   `0.000` false alarms across the entire 360° sky, sunset and mountain horizon
+   while letting a **stationary** enemy tank light up `pool4` cleanly — whereas
+   both whole-brain and within-hemisphere shuffles stayed dead silent (`0.0 Hz`).
+2. **A missed Battlezone shot jams the cannon for `29` ticks (`~2` seconds).**
+   Checking the emulator proved that an early off-axis shot locks out the gun
+   while the shell flies to the horizon, causing Atari to ignore later
+   dead-centre trigger pulls. Holding fire until the target sits tightly inside
+   the binocular fovea (`|LI| <= 0.18`) keeps the barrel loaded for the real
+   kill shot.
+
+Putting uncrossed foveas, real `R8` chromatic opponency (`v11`) and tight
+crosshair fire discipline together delivered the cleanest zero-RL combat runs
+of the project:
+
+- **Cluttered Battlezone (`out/bench_active_wiring10_v11_2026-11-19.json`):**
+  across ten 100-second seeded episodes, the frozen measured connectome reached
+  **`3.40` kills / 100 s** (scoring in 10 of 10 episodes, up to 6 kills), cut
+  deaths nearly in half to **`3.60` lives lost / 100 s** (fewer deaths than
+  *every* control, including `silenced`'s `4.20`), and hit **`+1.60` utility**
+  with zero RL — beating three whole-brain shuffles (`0.90–1.60` kills, `-0.35`
+  to `-1.60` utility), both within-hemisphere shuffles (`1.40–2.00` kills,
+  `-1.15` to `-1.25`), and `silenced` (`0.70` non-firing baseline kills, `0`
+  shots, `-1.40`).
+- **Default 60-second recordings (`./no-fly-zone record`):** wired mode scores
+  **`3,000` points with `3` lives lost** (first two kills at `3.5 s` and
+  `5.0 s`) and razor-even hunting (**`159` `LEFT` / `158` `RIGHT`**, `271`
+  `UP`, `80` `DOWN`, `133` `FIRE`). The physical-lever `--embodied` fly pushes
+  its cockpit levers (`-0.90..+1.00` left, `-0.85..+1.00` right) and presses
+  the fire button with its proboscis for **`3,000` points and only `1` life
+  lost in 60 seconds** (three kills inside the first `10.3` seconds).
+
+[Active binocular vision, target tracking, PPO shortcut analysis, uncrossed foveas and R8 chromatic vision](docs/research/active-vision-and-tracking-2026-11-17.md).
