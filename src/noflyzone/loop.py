@@ -27,18 +27,27 @@ class PilotLoop:
     def __init__(self, brain=None, seed: int | None = 0,
                  retina_zoom: float = 1.0,
                  retina_center: tuple[float, float] = (0.5, 0.5),
-                 eye_offset: float = 0.0, pilot: str = "wired"):
+                 eye_offset: float = 0.0, pilot: str = "wired",
+                 auto_reset: bool = True,
+                 eye_fovy: float | None = None,
+                 converge_eyes: bool = False,
+                 suppress_turn_transients: bool = False,
+                 policy_fn=None):
         """eye_offset: each eye's retina window is shifted sideways by this
         fraction of the image (left eye leftwards, right eye rightwards), so
         the two eyes see different parts of the screen with binocular overlap
-        in the middle — the only way a left/right readout can lateralise,
-        since both eye cameras render the same CRT."""
-        self.game = BattleZone(seed=seed)
+        in the middle."""
+        self.game = BattleZone(seed=seed, auto_reset=auto_reset)
         self.dt = self.game.dt
         if pilot not in ("wired", "embodied"):
             raise ValueError("pilot must be 'wired' or 'embodied'")
         self.pilot = pilot
-        self.cockpit = Cockpit(physics=(pilot == "embodied"))
+        self.policy_fn = policy_fn
+        self.suppress_turn_transients = bool(suppress_turn_transients)
+        self._last_rotated = False
+        self.cockpit = Cockpit(physics=(pilot == "embodied"),
+                               eye_fovy=eye_fovy,
+                               converge_eyes=converge_eyes)
         shape = (self.cockpit.render_height, self.cockpit.render_width)
         cx, cy = retina_center
         self.retina = HexRetina(image_shape=shape, zoom=retina_zoom,
@@ -69,6 +78,8 @@ class PilotLoop:
         photoreceptor drives and the game signals; no brain, no controls."""
         frame, reward, life_lost, episode_end = self._timed(
             "game", self.game.step, action)
+        act_name = self.game.action_meanings[action]
+        self._last_rotated = ("LEFT" in act_name or "RIGHT" in act_name)
         self.total_reward += reward
 
         if life_lost:
@@ -76,7 +87,25 @@ class PilotLoop:
         self.cockpit.set_lamp(self._lamp_steps > 0)
         self._lamp_steps = max(0, self._lamp_steps - 1)
 
-        self._timed("texture", self.cockpit.set_screen, frame)
+        return {**self.observe(), "reward": reward, "life_lost": life_lost,
+                "episode_end": episode_end}
+
+    def reset(self, seed: int, *, warmup_seed: int) -> dict:
+        """Reset the learning loop's world and cockpit without a scored tick."""
+        start = self.game.reset(seed=seed, warmup_seed=warmup_seed)
+        self.total_reward = 0.0
+        self._lamp_steps = 0
+        self._last_rotated = False
+        self.timings.clear()
+        self.controls = CockpitControls(self.game.action_meanings)
+        self.cockpit.set_lamp(False)
+        self.cockpit.set_controls(0.0, 0.0, False)
+        self.cockpit.set_screen(self.game.frame)
+        return start
+
+    def observe(self) -> dict:
+        """Read the current frame without advancing the game or neural state."""
+        self._timed("texture", self.cockpit.set_screen, self.game.frame)
         cam_l, cam_r = self.cockpit.eye_cameras
         eye_l = self._timed("render", self.cockpit.render, cam_l)
         eye_r = self._timed("render", self.cockpit.render, cam_r)
@@ -85,9 +114,7 @@ class PilotLoop:
             "right": self._timed("retina", self.retina_right.sample, eye_r),
         }
         drives = {side: self.retina.photoreceptors(s) for side, s in rgb.items()}
-        return {"eye_left": eye_l, "rgb": rgb, "drives": drives,
-                "reward": reward, "life_lost": life_lost,
-                "episode_end": episode_end}
+        return {"eye_left": eye_l, "rgb": rgb, "drives": drives}
 
     def step(self) -> dict:
         action = self.controls.to_action()
@@ -100,10 +127,15 @@ class PilotLoop:
         if episode_end:
             # the world jumped: temporal state must not bridge two episodes
             self.brain.reset()
+            self._last_rotated = False
         signals = {"damage": life_lost, "reward": reward,
-                   "episode_end": episode_end}
+                   "episode_end": episode_end,
+                   "self_turn": self._last_rotated and self.suppress_turn_transients}
         dn = self._timed("brain", self.brain.step, drives, self.dt, signals)
         self.controls.update(dn, self.dt)
+        if self.policy_fn is not None:
+            steer_cmd, throttle_cmd, fire_cmd = self.policy_fn(sensed, dn, episode_end)
+            self.controls.set_command(steer_cmd, throttle_cmd, fire_cmd, rates=dn)
         if self.pilot == "embodied":
             # the descending neurons' intent goes to the forelegs; the levers
             # move as far as the legs push them; the action reads the levers

@@ -104,9 +104,11 @@ def compose(beauty: np.ndarray, game: np.ndarray, controls, rates: dict,
         draw.rectangle([x + 2, min(mid, tip), x + 14, max(mid, tip)],
                        fill=ACCENT)
 
-    # descending-neuron rates, normalized against the dn.py calibration
+    # descending-neuron rates, normalized against the active controller's calibration when available
     draw.text((130, top + 10), "DESCENDING NEURONS", font=FONT, fill=DIM)
-    drives = dn.normalize(rates)
+    ctrl_drive = getattr(controls, "drive", None)
+    drives = (ctrl_drive if isinstance(ctrl_drive, dict) and all(n in ctrl_drive for n in dn.DN_NAMES)
+              else dn.normalize(rates))
     for i, name in enumerate(dn.DN_NAMES):
         y = top + 32 + i * 21
         _bar_h(draw, 130, y, 130, 12, drives[name], ACCENT,

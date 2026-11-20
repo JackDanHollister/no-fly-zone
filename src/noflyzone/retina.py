@@ -6,6 +6,7 @@ per-channel mean over each ommatidium's pixels.
 """
 
 import numpy as np
+from scipy import sparse
 from scipy.spatial import cKDTree
 
 # measured luminance of a full-white CRT at the eye cameras; the calibration
@@ -54,6 +55,13 @@ class HexRetina:
         self._valid = omm >= 0
         self._counts = np.bincount(omm[self._valid], minlength=self.n_ommatidia)
         self._counts = np.maximum(self._counts, 1).astype(np.float32)
+        valid_px = np.flatnonzero(self._valid)
+        omm_ids = omm[valid_px]
+        self._sample_mat = sparse.csr_matrix(
+            ((1.0 / self._counts[omm_ids]).astype(np.float32), (omm_ids, valid_px)),
+            shape=(self.n_ommatidia, h * w),
+            dtype=np.float32,
+        )
 
     def sample(self, img: np.ndarray) -> np.ndarray:
         """RGB image (H, W, 3) -> per-ommatidium mean RGB (n_ommatidia, 3)."""
@@ -61,13 +69,7 @@ class HexRetina:
             f"retina built for {self.image_shape}, got {img.shape[:2]} — "
             "cockpit render size and retina image_shape must match")
         flat = img.reshape(-1, 3).astype(np.float32)
-        out = np.empty((self.n_ommatidia, 3), dtype=np.float32)
-        ids = self._omm_of_pixel[self._valid]
-        for c in range(3):
-            out[:, c] = np.bincount(ids, weights=flat[self._valid, c],
-                                    minlength=self.n_ommatidia)
-        out /= self._counts[:, None]
-        return out
+        return np.asarray(self._sample_mat @ flat, dtype=np.float32)
 
     def photoreceptors(self, sample: np.ndarray) -> np.ndarray:
         """Ommatidium mean RGB (0-255) -> photoreceptor drives (n, 2) in [0, 1].

@@ -52,15 +52,28 @@ def run_one(loop, brain, args, calibration, condition, seed):
     loop.brain = brain
     brain.reset()
     # seeded random warm-up so the ten episodes are ten different games
+    w_min, w_max = (75, 150) if getattr(args, "preset", None) == "active" else (WARMUP_MIN, WARMUP_MAX)
     rng = np.random.default_rng(1000 + seed)
-    warmup = int(rng.integers(WARMUP_MIN, WARMUP_MAX + 1))
+    warmup = int(rng.integers(w_min, w_max + 1))
     for _ in range(warmup):
         loop.sense(int(rng.integers(loop.game.n_actions)))
     loop.total_reward = 0.0
     loop.controls = CockpitControls(loop.game.action_meanings, calibration=calibration,
                                     saccade_hold=args.saccade_hold,
+                                    startle_ticks=args.startle_ticks,
                                     startle_refractory=args.startle_refractory,
-                                    steer_mode=args.steer_mode)
+                                    startle_thresh=args.startle_thresh,
+                                    steer_mode=args.steer_mode,
+                                    steer_min_hz=args.steer_min_hz,
+                                    sharp_steer_hz=args.sharp_steer_hz,
+                                    search_steer=args.search_steer,
+                                    search_delay=args.search_delay,
+                                    patrol_sweep=args.patrol_sweep,
+                                    patrol_stride=args.patrol_stride,
+                                    fovea_li=args.fovea_li,
+                                    pip_lock_drive=args.pip_lock_drive,
+                                    off_axis_fire=not args.no_off_axis_fire,
+                                    direct_steer=args.direct_steer)
     names = loop.game.action_meanings
     acts, spiking, diffs, lrs, lives, fire = [], [], [], [], 0, 0
     # steering correctness: (target side, pool LI, steer gate crossed) per look tick
@@ -75,7 +88,7 @@ def run_one(loop, brain, args, calibration, condition, seed):
     t0 = time.time()
     for _ in range(args.steps):
         state = loop.step()
-        name = names[loop.controls.to_action()]
+        name = names[loop.controls.to_action(commit=False)]
         acts.append(name)
         lives += int(state["life_lost"])
         kills += int(state["reward"] > 0)
@@ -197,6 +210,7 @@ def steering_summary(events) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--preset", choices=["legacy", "active"], default="legacy")
     ap.add_argument("--backend", choices=BACKENDS, default="auto")
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--steps", type=int, default=450)
@@ -204,9 +218,25 @@ def main() -> None:
     ap.add_argument("--readout", default="pool4")
     ap.add_argument("--zoom", type=float, default=2.0)
     ap.add_argument("--eye-offset", type=float, default=0.15)
+    ap.add_argument("--center-y", type=float, default=0.5)
+    ap.add_argument("--eye-fovy", type=float, default=None)
+    ap.add_argument("--converge-eyes", action="store_true")
+    ap.add_argument("--suppress-turn-transients", action="store_true")
     ap.add_argument("--saccade-hold", type=int, default=3)
+    ap.add_argument("--startle-ticks", type=int, default=8)
     ap.add_argument("--startle-refractory", type=int, default=15)
+    ap.add_argument("--startle-thresh", type=float, default=0.5)
     ap.add_argument("--steer-mode", choices=["diff", "li"], default="li")
+    ap.add_argument("--steer-min-hz", type=float, default=8.0)
+    ap.add_argument("--sharp-steer-hz", type=float, default=0.0)
+    ap.add_argument("--search-steer", type=float, default=0.0)
+    ap.add_argument("--search-delay", type=int, default=2)
+    ap.add_argument("--patrol-sweep", type=int, default=0)
+    ap.add_argument("--patrol-stride", type=int, default=0)
+    ap.add_argument("--fovea-li", type=float, default=0.0)
+    ap.add_argument("--pip-lock-drive", type=float, default=0.75)
+    ap.add_argument("--no-off-axis-fire", action="store_true")
+    ap.add_argument("--direct-steer", action="store_true")
     ap.add_argument("--sensory", choices=["free", "external_only"], default="free")
     ap.add_argument("--signs", choices=["predicted", "known_first"], default="predicted")
     ap.add_argument("--aminergic", choices=["excitatory", "zero"], default="excitatory")
@@ -221,6 +251,20 @@ def main() -> None:
                     help="controller calibration for every condition (default: the condition's readout); "
                          "'adaptive' scales spans and the steer gate to each pool's own running peak")
     ap.add_argument("--out", default="bench_pilots.json")
+    sel = argparse.ArgumentParser(add_help=False)
+    sel.add_argument("--preset", default="legacy")
+    p_args, _ = sel.parse_known_args()
+    if p_args.preset == "active":
+        ap.set_defaults(
+            injection="v11", readout="pool4", zoom=1.75, eye_offset=0.21,
+            center_y=0.48, eye_fovy=54.0, converge_eyes=True,
+            suppress_turn_transients=True, saccade_hold=1, startle_ticks=5,
+            startle_refractory=18, startle_thresh=0.80, steer_mode="li",
+            steer_min_hz=8.0, sharp_steer_hz=6.0, search_steer=1.0,
+            search_delay=2, patrol_sweep=6, patrol_stride=4, fovea_li=0.18,
+            pip_lock_drive=0.50, no_off_axis_fire=True,
+            direct_steer=True, aminergic="zero", sensory="external_only",
+        )
     args = ap.parse_args()
     # condition tokens: name[@ablate_seed][xweight_scale][:readout]; a bare
     # "rewired" expands over --ablate-seeds and --rewired-scales
@@ -254,7 +298,11 @@ def main() -> None:
             print("\nstub: hand-written ReflexBrain, calibration v0")
         for seed in args.seeds:
             loop = PilotLoop(seed=seed, retina_zoom=args.zoom,
-                             eye_offset=args.eye_offset)
+                             retina_center=(0.5, args.center_y),
+                             eye_offset=args.eye_offset,
+                             eye_fovy=args.eye_fovy,
+                             converge_eyes=args.converge_eyes,
+                             suppress_turn_transients=args.suppress_turn_transients)
             if cond == "stub":
                 brain, calibration = loop.brain, "v0"
             else:

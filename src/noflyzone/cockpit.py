@@ -366,8 +366,37 @@ def _physics_xml(xml: str) -> str:
     return xml
 
 
-def _build_model(with_fly: bool, physics: bool = False) -> mujoco.MjModel:
+def _apply_eye_cameras(xml: str, eye_fovy: float | None, converge_eyes: bool) -> str:
+    """Optionally widen eye FOV and converge both eyes on the CRT centre (0, 0.25, 0.10).
+
+    Default (None, False) keeps the legacy parallel fovy=45 cameras untouched.
+    With eye_fovy=54.0 and converge_eyes=True, both 320x240 eye renders stay 100%
+    on CRT glass (zero bezel bleed) while framing the top radar and centering the
+    crosshairs (x=0) at u=0.50 in both eyes for true binocular overlap.
+    """
+    if eye_fovy is None and not converge_eyes:
+        return xml
+    fovy_attr = f' fovy="{float(eye_fovy):g}"' if eye_fovy is not None else ""
+    old_l = '<camera name="eye_left" pos="-0.022 0.075 0.062" xyaxes="1 0 0 0 -0.212 0.977"/>'
+    old_r = '<camera name="eye_right" pos="0.022 0.075 0.062" xyaxes="1 0 0 0 -0.212 0.977"/>'
+    assert old_l in xml and old_r in xml, "eye camera block missing"
+    if converge_eyes:
+        new_l = (
+            '<body name="screen_target" pos="0 0.25 0.10"/>\n'
+            f'    <camera name="eye_left" pos="-0.022 0.075 0.062" mode="targetbody" target="screen_target"{fovy_attr}/>'
+        )
+        new_r = f'<camera name="eye_right" pos="0.022 0.075 0.062" mode="targetbody" target="screen_target"{fovy_attr}/>'
+    else:
+        new_l = f'<camera name="eye_left" pos="-0.022 0.075 0.062" xyaxes="1 0 0 0 -0.212 0.977"{fovy_attr}/>'
+        new_r = f'<camera name="eye_right" pos="0.022 0.075 0.062" xyaxes="1 0 0 0 -0.212 0.977"{fovy_attr}/>'
+    return xml.replace(old_l, new_l, 1).replace(old_r, new_r, 1)
+
+
+def _build_model(with_fly: bool, physics: bool = False,
+                 eye_fovy: float | None = None,
+                 converge_eyes: bool = False) -> mujoco.MjModel:
     xml = _physics_xml(_XML) if physics else _XML
+    xml = _apply_eye_cameras(xml, eye_fovy=eye_fovy, converge_eyes=converge_eyes)
     if not with_fly:
         return mujoco.MjModel.from_xml_string(xml)
     spec = mujoco.MjSpec.from_string(xml)
@@ -544,16 +573,20 @@ def _paint_decals(model: mujoco.MjModel) -> None:
 
 class Cockpit:
     def __init__(self, render_width: int = 320, render_height: int = 240,
-                 with_fly: bool | None = None, physics: bool = False):
+                 with_fly: bool | None = None, physics: bool = False,
+                 eye_fovy: float | None = None, converge_eyes: bool = False):
         if with_fly is None:
             with_fly = FLY_XML.exists()
         if physics and not with_fly:
             raise ValueError("embodied mode needs the flybody assets")
         self.with_fly = with_fly
         self.physics = physics
+        self.eye_fovy = eye_fovy
+        self.converge_eyes = converge_eyes
         self.render_width = render_width
         self.render_height = render_height
-        self.model = _build_model(with_fly, physics)
+        self.model = _build_model(with_fly, physics, eye_fovy=eye_fovy,
+                                  converge_eyes=converge_eyes)
         self.data = mujoco.MjData(self.model)
         if with_fly:
             for name, val in _load_fly_stance().items():

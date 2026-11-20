@@ -150,6 +150,32 @@ INJECTION_MAPS["v9"] = [
     ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
     ("T2", "onoff_wf", 3000.0), ("T2a", "onoff_wf", 3000.0), ("T3", "onoff_wf", 3000.0),
 ]
+# v10: strict superset of v4 — keeps T3's full onoff drive for pool4 while
+# adding R8 blue photoreceptors (HexRetina channel 1) and wide-field-opponent
+# small-object drive on T2 (feeding LC11 without T2a's escape cross-talk). ENGINEERED.
+INJECTION_MAPS["v10"] = INJECTION_MAPS["v4"] + [
+    ("R8", "blue", MAX_PR_RATE),
+    ("T2", "onoff_wf", 3000.0),
+]
+# v11: v4 plus sustained 2D local chromatic opponency (R8 blue minus R1-6
+# broadband, compact horizontal & vertical surround) at the real R8-downstream
+# chromatic medulla neurons (Tm20, Tm5a, Tm5b — 3,630 measured excitatory edges
+# onto LC10a/LC11/LC4 in FlyWire v783) and combined onoff+chromatic drive on T3.
+# Models the histaminergic R8/Dm9 chromatic surround stage that a point LIF
+# cannot propagate, letting stationary compact objects stay visible when an
+# enemy stops moving to aim. ENGINEERED.
+CHROMA_THRESH = 0.09
+INJECTION_MAPS["v11"] = [
+    ("R1-6", "lum", MAX_PR_RATE),
+    ("R8", "blue", MAX_PR_RATE),
+    ("Mi1", "on", 3000.0), ("Tm3", "on", 3000.0),
+    ("Tm1", "off", 3000.0), ("Tm2", "off", 2000.0),
+    ("Tm4", "off", 2000.0), ("Tm9", "off", 2000.0),
+    ("T3", "onoff_chr", 3000.0),
+    ("Tm20", "chr_cs", 3500.0),
+    ("Tm5a", "chr_cs", 3500.0),
+    ("Tm5b", "chr_cs", 3500.0),
+]
 INJECTION_MAPS["v6"] = INJECTION_MAPS["v4"] + [
     ("T4a", "on_dir_px", 20000.0), ("T4b", "on_dir_mx", 20000.0),
     ("T4c", "on_dir_py", 20000.0), ("T4d", "on_dir_my", 20000.0),
@@ -190,6 +216,31 @@ def surround_matrix(xy: np.ndarray, radius: float = 2.0):
     counts = np.bincount(rows, minlength=len(xy)).astype(np.float64)
     vals = 1.0 / counts[rows]
     return sparse.csr_matrix((vals, (rows, cols)), shape=(len(xy), len(xy)))
+
+
+def directional_surround_matrices(xy: np.ndarray):
+    """Row-normalised sparse horizontal and vertical surround matrices on the
+    hex lattice: a 1D horizon edge matches its horizontal surround, whereas a
+    compact object stands out against both horizontal and vertical surrounds."""
+    from scipy import sparse
+    xy = np.asarray(xy, dtype=np.float32)
+    dx = np.abs(xy[:, None, 0] - xy[None, :, 0])
+    dy = np.abs(xy[:, None, 1] - xy[None, :, 1])
+    h_mask = (dy < 0.03) & (dx > 0.14) & (dx < 0.45)
+    v_mask = (dx < 0.10) & (dy > 0.14) & (dy < 0.45)
+    h_w = h_mask.astype(np.float32) / np.maximum(h_mask.sum(1, keepdims=True), 1.0)
+    v_w = v_mask.astype(np.float32) / np.maximum(v_mask.sum(1, keepdims=True), 1.0)
+    return sparse.csr_matrix(h_w), sparse.csr_matrix(v_w)
+
+
+def compact_chroma(lum: np.ndarray, blue: np.ndarray, H_w, V_w,
+                   thresh: float = CHROMA_THRESH) -> np.ndarray:
+    """Pure photoreceptor-level signed 2D R8 blue-ON / R1-6-OFF chromatic
+    centre-surround opponency (models R8 Rh5 -> Dm9 -> Tm20/Tm5a/Tm5b)."""
+    opp = (blue - lum).astype(np.float32)
+    dh = np.clip(opp - (H_w @ opp), 0.0, None)
+    dv = np.clip(opp - (V_w @ opp), 0.0, None)
+    return np.clip(np.minimum(dh, dv) - thresh, 0.0, None)
 
 
 def centre_surround(sig: np.ndarray, S, k: float = 1.0) -> np.ndarray:
@@ -496,7 +547,9 @@ class ConnectomeBrain:
         self._pr_all = np.concatenate(chunks)
         self._rates = np.zeros(len(self._pr_all), np.float32)
         self._S = surround_matrix(retina.centers_xy, SURROUND_RADIUS) \
-            if any(mode.endswith(("_cs", "_wf")) for mode, _, _, _, _ in self._pops) else None
+            if any(mode.endswith(("_cs", "_wf")) and mode != "chr_cs" for mode, _, _, _, _ in self._pops) else None
+        self._HV = directional_surround_matrices(retina.centers_xy) \
+            if any(mode in ("chr_cs", "onoff_chr") for mode, _, _, _, _ in self._pops) else None
         self.n_visual = int(sum(sl.stop - sl.start for _, _, sl, _, _ in self._pops))
         self._prev_lum: dict[str, np.ndarray | None] = {"left": None,
                                                         "right": None}
@@ -559,19 +612,33 @@ class ConnectomeBrain:
     def _direction(self, cur: np.ndarray, prev: np.ndarray, key: str) -> np.ndarray:
         return reichardt(cur, prev, self._nb[key])
 
-    def step(self, drives: dict[str, np.ndarray], dt: float,
-             signals: dict | None = None) -> dict[str, float]:
+    def encode_stream(self, drives: dict[str, np.ndarray], dt: float,
+                      state: dict, *, self_turn: bool = False,
+                      out_rates: np.ndarray | None = None) -> tuple[np.ndarray, dict[str, np.ndarray]]:
+        """Encode one fly's bilateral photoreceptor drives (n_omm, 2) into
+        visual Poisson rates using `state` ({prev_lum, lp, prev_onoff}).
+
+        When `self_turn` is True (efference copy of a discrete tank rotation),
+        temporal transients `delta` are suppressed for this tick while updating
+        `prev_lum` so self-generated mountain shifts do not trigger looming.
+        """
         lum = {side: drives[side][:, 0] for side in ("left", "right")}
+        blue = {side: drives[side][:, 1] if drives[side].shape[1] > 1 else drives[side][:, 0]
+                for side in ("left", "right")}
         delta = {}
         alpha = 1.0 - np.exp(-dt / LOWPASS_TAU)
+        prev_lum = state["prev_lum"]
+        lp_map = state["lp"]
+        prev_onoff = state["prev_onoff"]
         for side in lum:
-            prev = self._prev_lum[side]
-            delta[side] = (lum[side] - prev) if prev is not None \
-                else np.zeros_like(lum[side])
-            self._prev_lum[side] = lum[side]
-            lp = self._lp[side]
-            self._lp[side] = lum[side].copy() if lp is None \
-                else lp + alpha * (lum[side] - lp)
+            prev = prev_lum[side]
+            if prev is None or self_turn:
+                delta[side] = np.zeros_like(lum[side])
+            else:
+                delta[side] = lum[side] - prev
+            prev_lum[side] = lum[side]
+            lp = lp_map[side]
+            lp_map[side] = lum[side].copy() if lp is None else lp + alpha * (lum[side] - lp)
         onoff = {side: (np.clip(delta[side], 0.0, None), np.clip(-delta[side], 0.0, None))
                  for side in lum}
         cs = {}
@@ -581,28 +648,44 @@ class ConnectomeBrain:
                 cs[(side, "off_cs")] = centre_surround(onoff[side][1], self._S, SURROUND_K)
                 cs[(side, "onoff_cs")] = cs[(side, "on_cs")] + cs[(side, "off_cs")]
                 for ch in ("on", "off"):
-                    cs[(side, f"{ch}_wf")] = wide_field_opponent(cs[(side, f"{ch}_cs")], WIDEFIELD_K, WIDEFIELD_FRAC)
+                    cs[(side, f"{ch}_wf")] = wide_field_opponent(
+                        cs[(side, f"{ch}_cs")], WIDEFIELD_K, WIDEFIELD_FRAC)
                 cs[(side, "onoff_wf")] = cs[(side, "on_wf")] + cs[(side, "off_wf")]
+        chr_cs: dict[str, np.ndarray] = {}
+        if self._HV is not None:
+            H_w, V_w = self._HV
+            for side in lum:
+                if self_turn:
+                    chr_cs[side] = np.zeros_like(lum[side])
+                else:
+                    chr_cs[side] = compact_chroma(lum[side], blue[side], H_w, V_w)
         dirs: dict[tuple[str, str], np.ndarray] = {}
         for side in lum:
-            prev = self._prev_onoff[side]
-            if prev is not None:
+            prev = prev_onoff[side]
+            if prev is not None and not self_turn:
                 for key in DIR_VECTORS:
                     dirs[(side, "on_dir_" + key)] = self._direction(onoff[side][0], prev[0], key)
                     dirs[(side, "off_dir_" + key)] = self._direction(onoff[side][1], prev[1], key)
-            self._prev_onoff[side] = onoff[side]
+            prev_onoff[side] = None if self_turn else onoff[side]
+        rates = self._rates if out_rates is None else out_rates
         for mode, gain, sl, omm, side in self._pops:
             if mode == "lum":
                 sig = lum[side][omm]
+            elif mode == "blue":
+                sig = blue[side][omm]
             elif mode == "on":
                 sig = np.clip(delta[side][omm], 0.0, None)
             elif mode == "off":
                 sig = np.clip(-delta[side][omm], 0.0, None)
             elif mode == "lum_lp":     # slow sustained ON
-                sig = self._lp[side][omm]
+                sig = lp_map[side][omm]
             elif mode == "dark_lp":    # slow sustained in the dark
-                sig = 1.0 - self._lp[side][omm]
-            elif mode.endswith(("_cs", "_wf")):   # v7 surround, v8 surround + wide-field opponency
+                sig = 1.0 - lp_map[side][omm]
+            elif mode == "chr_cs":
+                sig = chr_cs[side][omm]
+            elif mode == "onoff_chr":
+                sig = np.abs(delta[side][omm]) + chr_cs[side][omm]
+            elif mode.endswith(("_cs", "_wf")):   # v7 surround, v8/v9/v10 wide-field opponency
                 sig = cs[(side, mode)][omm]
             elif mode.startswith(("on_dir_", "off_dir_")):  # v6 correlator channels
                 key = mode
@@ -613,7 +696,14 @@ class ConnectomeBrain:
                 sig = d[omm] if d is not None else np.zeros(len(omm), np.float32)
             else:  # onoff: any change
                 sig = np.abs(delta[side][omm])
-            self._rates[sl] = np.minimum(sig * gain, TRANSIENT_CAP)
+            rates[sl] = np.minimum(sig * gain, TRANSIENT_CAP)
+        return rates, delta
+
+    def step(self, drives: dict[str, np.ndarray], dt: float,
+             signals: dict | None = None) -> dict[str, float]:
+        self_turn = bool(signals and signals.get("self_turn", False))
+        state = {"prev_lum": self._prev_lum, "lp": self._lp, "prev_onoff": self._prev_onoff}
+        self.encode_stream(drives, dt, state, self_turn=self_turn, out_rates=self._rates)
         self.brain.update_rates(self._rates)
 
         counts = self.window_counts

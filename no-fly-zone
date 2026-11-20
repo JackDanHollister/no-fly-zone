@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+NFZ_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ ! -x "$NFZ_ROOT/.venv/bin/python" ]]; then
+    printf '%s\n' 'Create the project environment first; see the Run it section in README.md.' >&2
+    exit 1
+fi
+exec "$NFZ_ROOT/.venv/bin/python" "$NFZ_ROOT/scripts/pilot.py" "$@"
